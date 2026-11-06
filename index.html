@@ -2416,6 +2416,7 @@ var SceneFX = (function(){
   var fxProps=[], boltMesh=null, boltT=9;
   var boatGroup=null, prop=null;
   var backTex=null;
+  var lilies=[], swayers=[], schoolFish=[], waterDetailTex=null, sheenDetailTex=null, fabricTexCache=null;
 
   function rnd(n){ var x=Math.sin(n*127.1+311.7)*43758.5453; return x-Math.floor(x); }
   function mat(c,o){ return new THREE.MeshStandardMaterial(Object.assign({ color:c, roughness:0.8, metalness:0.04 }, o||{})); }
@@ -2444,6 +2445,102 @@ var SceneFX = (function(){
     g.fillStyle="rgba(255,240,200,.25)"; g.fillRect(0,0,256,10);
     g.fillStyle="rgba(60,35,10,.35)"; g.fillRect(0,246,256,10);
     var tx=new THREE.CanvasTexture(cv); if("colorSpace" in tx && THREE.SRGBColorSpace) tx.colorSpace=THREE.SRGBColorSpace;
+    return tx;
+  }
+  /* Water surface detail: soft current streaks, caustic speckles and faint
+     ripple arcs on a mid-blue base. The material colour tints it, and the
+     map offset drifts in tick() so the surface visibly shimmers and flows. */
+  function waterTexture(){
+    var cv=document.createElement("canvas"); cv.width=256; cv.height=256;
+    var g=cv.getContext("2d");
+    g.fillStyle="#8fc6e8"; g.fillRect(0,0,256,256);
+    for(var i=0;i<46;i++){
+      var y=rnd(i*3+7)*256, len=40+rnd(i*5)*130, x=rnd(i*7)*256;
+      g.strokeStyle="rgba(255,255,255,"+(0.05+rnd(i*11)*0.10)+")"; g.lineWidth=1.5+rnd(i*13)*2.5;
+      g.beginPath(); g.moveTo(x,y);
+      g.bezierCurveTo(x+len*0.35,y+(rnd(i*17)-0.5)*7, x+len*0.7,y+(rnd(i*19)-0.5)*7, x+len,y); g.stroke();
+    }
+    for(var j=0;j<40;j++){
+      var y2=rnd(j*23+3)*256, len2=30+rnd(j*29)*90, x2=rnd(j*31)*256;
+      g.strokeStyle="rgba(20,70,130,"+(0.05+rnd(j*37)*0.09)+")"; g.lineWidth=1+rnd(j*41)*2;
+      g.beginPath(); g.moveTo(x2,y2); g.lineTo(x2+len2,y2+(rnd(j*43)-0.5)*6); g.stroke();
+    }
+    for(var k=0;k<260;k++){
+      g.fillStyle="rgba(255,255,255,"+(0.05+rnd(k*47)*0.13)+")";
+      g.beginPath(); g.arc(rnd(k*53)*256, rnd(k*59)*256, 0.6+rnd(k*61)*1.7, 0, Math.PI*2); g.fill();
+    }
+    for(var a=0;a<14;a++){
+      g.strokeStyle="rgba(230,250,255,"+(0.06+rnd(a*67)*0.08)+")"; g.lineWidth=1.4;
+      g.beginPath(); g.arc(rnd(a*71)*256, rnd(a*73)*256, 8+rnd(a*79)*20, rnd(a*83)*3, rnd(a*83)*3+1.6); g.stroke();
+    }
+    var tx=new THREE.CanvasTexture(cv); if("colorSpace" in tx && THREE.SRGBColorSpace) tx.colorSpace=THREE.SRGBColorSpace;
+    tx.wrapS=tx.wrapT=THREE.RepeatWrapping;
+    return tx;
+  }
+  /* Grass: thousands of short blade strokes in layered greens over a deep
+     green base, with a few bare-earth flecks — reads as real turf, not a
+     flat green disc. */
+  function grassTexture(){
+    var cv=document.createElement("canvas"); cv.width=256; cv.height=256;
+    var g=cv.getContext("2d");
+    g.fillStyle="#527a3e"; g.fillRect(0,0,256,256);
+    var greens=["#5d8a4a","#6da355","#48703a","#7fb069","#3f6b33","#86c06a"];
+    for(var i=0;i<2400;i++){
+      var x=rnd(i*3)*256, y=rnd(i*5)*256, h=3+rnd(i*7)*5;
+      g.strokeStyle=greens[i%greens.length]; g.globalAlpha=0.35+rnd(i*11)*0.5; g.lineWidth=1.1;
+      g.beginPath(); g.moveTo(x,y); g.lineTo(x+(rnd(i*13)-0.5)*2.4, y-h); g.stroke();
+    }
+    g.globalAlpha=1;
+    for(var k=0;k<26;k++){
+      g.fillStyle="rgba(140,115,75,"+(0.10+rnd(k*17)*0.14)+")";
+      g.beginPath(); g.ellipse(rnd(k*19)*256, rnd(k*23)*256, 3+rnd(k*29)*7, 2+rnd(k*31)*4, rnd(k*37), 0, Math.PI*2); g.fill();
+    }
+    var tx=new THREE.CanvasTexture(cv); if("colorSpace" in tx && THREE.SRGBColorSpace) tx.colorSpace=THREE.SRGBColorSpace;
+    tx.wrapS=tx.wrapT=THREE.RepeatWrapping;
+    return tx;
+  }
+  /* Stone: mottled grey with darker cracks, speckle and a hint of moss —
+     so the shore rocks read as wet pond stone. */
+  function stoneTexture(){
+    var cv=document.createElement("canvas"); cv.width=256; cv.height=256;
+    var g=cv.getContext("2d");
+    g.fillStyle="#9aa09c"; g.fillRect(0,0,256,256);
+    for(var i=0;i<60;i++){
+      g.fillStyle="rgba("+(110+rnd(i*3)*50|0)+","+(115+rnd(i*5)*45|0)+","+(110+rnd(i*7)*40|0)+","+(0.12+rnd(i*11)*0.2)+")";
+      g.beginPath(); g.ellipse(rnd(i*13)*256, rnd(i*17)*256, 10+rnd(i*19)*30, 7+rnd(i*23)*20, rnd(i*29)*3, 0, Math.PI*2); g.fill();
+    }
+    for(var c=0;c<9;c++){
+      g.strokeStyle="rgba(52,56,54,"+(0.3+rnd(c*31)*0.25)+")"; g.lineWidth=1+rnd(c*37)*1.4;
+      var x=rnd(c*41)*256, y=rnd(c*43)*256; g.beginPath(); g.moveTo(x,y);
+      for(var s=0;s<4;s++){ x+=(rnd(c*47+s)-0.5)*46; y+=(rnd(c*53+s)-0.5)*46; g.lineTo(x,y); }
+      g.stroke();
+    }
+    for(var k=0;k<420;k++){
+      g.fillStyle=rnd(k*59)>0.6?"rgba(255,255,255,.14)":"rgba(30,34,32,.16)";
+      g.fillRect(rnd(k*61)*256, rnd(k*67)*256, 1.6, 1.6);
+    }
+    for(var m=0;m<16;m++){
+      g.fillStyle="rgba(90,130,70,"+(0.12+rnd(m*71)*0.16)+")";
+      g.beginPath(); g.arc(rnd(m*73)*256, rnd(m*79)*256, 3+rnd(m*83)*8, 0, Math.PI*2); g.fill();
+    }
+    var tx=new THREE.CanvasTexture(cv); if("colorSpace" in tx && THREE.SRGBColorSpace) tx.colorSpace=THREE.SRGBColorSpace;
+    tx.wrapS=tx.wrapT=THREE.RepeatWrapping;
+    return tx;
+  }
+  /* Fabric weave for the anglers' clothes: a fine cross-hatch in near-white
+     so each garment's own colour tints it — shirts, vests and trousers read
+     as cloth instead of flat plastic. Cached: one weave for everyone. */
+  function fabricTexture(){
+    if(fabricTexCache) return fabricTexCache;
+    var cv=document.createElement("canvas"); cv.width=128; cv.height=128;
+    var g=cv.getContext("2d");
+    g.fillStyle="#e9e9e9"; g.fillRect(0,0,128,128);
+    for(var y=0;y<128;y+=3){ g.fillStyle=(y/3)%2?"rgba(0,0,0,.07)":"rgba(255,255,255,.07)"; g.fillRect(0,y,128,1.4); }
+    for(var x=0;x<128;x+=3){ g.fillStyle=(x/3)%2?"rgba(0,0,0,.05)":"rgba(255,255,255,.05)"; g.fillRect(x,0,1.4,128); }
+    for(var i=0;i<130;i++){ g.fillStyle="rgba(0,0,0,"+(0.03+rnd(i*7)*0.05)+")"; g.fillRect(rnd(i*11)*128, rnd(i*13)*128, 1.4, 1.4); }
+    var tx=new THREE.CanvasTexture(cv); if("colorSpace" in tx && THREE.SRGBColorSpace) tx.colorSpace=THREE.SRGBColorSpace;
+    tx.wrapS=tx.wrapT=THREE.RepeatWrapping; tx.repeat.set(3,3);
+    fabricTexCache=tx;
     return tx;
   }
   function cardFrontTexture(rank,suit){
@@ -2519,7 +2616,7 @@ var SceneFX = (function(){
   /* ---------------- anglers ---------------- */
   function makeAngler(opts){
     var grp=new THREE.Group();
-    var skin=mat(opts.skin,{roughness:0.55}), shirt=mat(opts.shirt), vestM=mat(opts.vest), pants=mat(0x2e4356), hatM=mat(opts.hat), hairM=mat(opts.hair);
+    var skin=mat(opts.skin,{roughness:0.55}), shirt=mat(opts.shirt,{map:fabricTexture(), roughness:0.92}), vestM=mat(opts.vest,{map:fabricTexture(), roughness:0.92}), pants=mat(0x2e4356,{map:fabricTexture(), roughness:0.95}), hatM=mat(opts.hat,{map:fabricTexture(), roughness:0.9}), hairM=mat(opts.hair);
     var u={ seated:!!opts.seated, cast:null, react:null, blinkAt:2+rnd(opts.seed)*3, blinkT:0, phase:rnd(opts.seed*3)*6 };
     grp.userData=u;
     var bodyBaseY;
@@ -2935,17 +3032,22 @@ var SceneFX = (function(){
     renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
     renderer.shadowMap.enabled=true;
     renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+    // warm filmic grading for depth — a plain renderer setting, no
+    // post-processing chain, nothing that can wash out or blank the pond
+    if(THREE.ACESFilmicToneMapping!=null){ renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05; }
+    if("outputColorSpace" in renderer && THREE.SRGBColorSpace) renderer.outputColorSpace=THREE.SRGBColorSpace;
     wrap.insertBefore(renderer.domElement, wrap.firstChild);
     scene=new THREE.Scene();
     scene.background=new THREE.Color(0x7ec3e0);
     scene.fog=new THREE.Fog(0x7ec3e0, 42, 88);
     camera=new THREE.PerspectiveCamera(54, 1, 0.1, 200);
-    scene.add(new THREE.HemisphereLight(0xcfefff, 0x1d4e4a, 0.95));
-    var sun=new THREE.DirectionalLight(0xfff2cf, 1.55); sun.position.set(10,18,8);
-    sun.castShadow=true; sun.shadow.mapSize.set(1024,1024);
-    sun.shadow.camera.left=-24; sun.shadow.camera.right=24; sun.shadow.camera.top=24; sun.shadow.camera.bottom=-24; sun.shadow.camera.far=60;
+    scene.add(new THREE.HemisphereLight(0xcfefff, 0x1d4e4a, 0.78));
+    var sun=new THREE.DirectionalLight(0xffe9bd, 1.85); sun.position.set(11,19,7);
+    sun.castShadow=true; sun.shadow.mapSize.set(2048,2048);
+    sun.shadow.camera.left=-26; sun.shadow.camera.right=26; sun.shadow.camera.top=26; sun.shadow.camera.bottom=-26; sun.shadow.camera.far=65;
+    sun.shadow.bias=-0.0003; if("normalBias" in sun.shadow) sun.shadow.normalBias=0.03;
     scene.add(sun);
-    var fill=new THREE.DirectionalLight(0xbfe8ff, 0.4); fill.position.set(-8,10,-10); scene.add(fill);
+    var fill=new THREE.DirectionalLight(0xbfe8ff, 0.32); fill.position.set(-8,10,-10); scene.add(fill);
     var warm=new THREE.PointLight(0xffc46b, 0.5, 12); warm.position.set(3.4,3.1,9.2); scene.add(warm);
     backTex=cardBackTexture();
     var woodTex=woodTexture();
@@ -2955,9 +3057,11 @@ var SceneFX = (function(){
        under the boat and the dock, sun glints, ripple rings, foam at the
        banks — rich and vivid in a still screenshot, plain materials only,
        never a blinding white ----- */
-    var water=new THREE.Mesh(new THREE.CircleGeometry(17.5,56), mat(0x1a74b8,{roughness:0.28, metalness:0.12}));
+    waterDetailTex=waterTexture(); waterDetailTex.repeat.set(5,5);
+    var water=new THREE.Mesh(new THREE.CircleGeometry(17.5,56), mat(0x1a74b8,{map:waterDetailTex, roughness:0.28, metalness:0.12}));
     water.rotation.x=-Math.PI/2; water.receiveShadow=true; scene.add(water);
-    var sheen=new THREE.Mesh(new THREE.CircleGeometry(17.5,56), mat(0x3fa9e0,{roughness:0.25, metalness:0.15, transparent:true, opacity:0.3}));
+    sheenDetailTex=waterTexture(); sheenDetailTex.repeat.set(3,3);
+    var sheen=new THREE.Mesh(new THREE.CircleGeometry(17.5,56), mat(0x3fa9e0,{map:sheenDetailTex, roughness:0.25, metalness:0.15, transparent:true, opacity:0.3}));
     sheen.rotation.x=-Math.PI/2; sheen.position.y=0.012; scene.add(sheen);
     function depthBand(geo,color,op,y,rough){
       var b=new THREE.Mesh(geo, mat(color,{roughness:rough||0.32, transparent:true, opacity:op}));
@@ -3025,6 +3129,7 @@ var SceneFX = (function(){
       if(pi%3===0){ var fl=new THREE.Mesh(new THREE.SphereGeometry(0.13,8,6), mat(0xf6c6dd,{roughness:0.5})); fl.position.set(0.2,0.09,0.1); fl.scale.y=0.7; pad.add(fl); }
       if(pi%4===1){ var fl2=new THREE.Mesh(new THREE.SphereGeometry(0.11,8,6), mat(0xffe9a8,{roughness:0.5})); fl2.position.set(-0.18,0.08,-0.14); fl2.scale.y=0.7; pad.add(fl2); }
       pad.position.set(p[0],0.045,p[1]); pad.rotation.y=pi*1.3; scene.add(pad);
+      lilies.push({ grp:pad, phase:pi*0.83, baseY:0.045 });
     });
     // cattail clusters
     [[16.9,2.5],[-16.5,5.5],[15.8,-6.5],[-15.2,-8.2],[7.5,16.6],[-8.8,16.2],[12.5,12.8],[-13.5,11.5],[3.2,17.2],[-17.2,-1.5]].forEach(function(p,ci){
@@ -3037,18 +3142,22 @@ var SceneFX = (function(){
         var blade=put(cluster, box(0.05,h*0.8,0.14,0x5d8a4a,{roughness:0.9}), (ri2-2)*0.24, h*0.32, 0.15); blade.rotation.z=(ri2-2)*0.14;
       }
       cluster.position.set(p[0],0,p[1]); scene.add(cluster);
+      swayers.push({ grp:cluster, phase:ci*1.37, amp:0.045, speed:0.9 });
     });
 
     /* ----- shore, rocks, pines, bushes, grass, clouds ----- */
-    var shore=new THREE.Mesh(new THREE.CircleGeometry(32,40), mat(0x5d8a4a,{roughness:1}));
+    var grassTex=grassTexture(); grassTex.repeat.set(9,9);
+    var shore=new THREE.Mesh(new THREE.CircleGeometry(32,40), mat(0x6f9a58,{map:grassTex, roughness:1}));
     shore.rotation.x=-Math.PI/2; shore.position.y=-0.3; shore.receiveShadow=true; scene.add(shore);
-    var rim=new THREE.Mesh(new THREE.RingGeometry(17.5,19.6,56), mat(0xb59a67,{roughness:1}));
+    var rimTex=grassTexture(); rimTex.repeat.set(14,14);
+    var rim=new THREE.Mesh(new THREE.RingGeometry(17.5,19.6,56), mat(0xb59a67,{map:rimTex, roughness:1}));
     rim.rotation.x=-Math.PI/2; rim.position.y=-0.02; scene.add(rim);
+    var stoneTex=stoneTexture();
     [[19.5,7],[-20,-4],[14,-17],[-11,19],[21,-11],[-19,13],[16.8,-3.5],[-16.9,-4.2],[12,18.6],[-21,3]].forEach(function(p,ri3){
-      var rock=new THREE.Mesh(new THREE.DodecahedronGeometry(0.65+rnd(ri3*31)*0.6), mat(ri3%2?0x8b8f8c:0x7c8280,{roughness:1}));
-      rock.position.set(p[0],0.05,p[1]); rock.rotation.set(ri3*0.7,ri3*1.3,ri3*0.4); rock.castShadow=true; scene.add(rock);
-      var rock2=new THREE.Mesh(new THREE.DodecahedronGeometry(0.3+rnd(ri3*41)*0.25), mat(0x9aa09c,{roughness:1}));
-      rock2.position.set(p[0]+0.9,0.0,p[1]+0.5); scene.add(rock2);
+      var rock=new THREE.Mesh(new THREE.DodecahedronGeometry(0.65+rnd(ri3*31)*0.6), mat(ri3%2?0xbfc4c0:0xb2b8b4,{map:stoneTex, roughness:1}));
+      rock.position.set(p[0],0.05,p[1]); rock.rotation.set(ri3*0.7,ri3*1.3,ri3*0.4); rock.castShadow=true; rock.receiveShadow=true; scene.add(rock);
+      var rock2=new THREE.Mesh(new THREE.DodecahedronGeometry(0.3+rnd(ri3*41)*0.25), mat(0xc2c8c4,{map:stoneTex, roughness:1}));
+      rock2.position.set(p[0]+0.9,0.0,p[1]+0.5); rock2.castShadow=true; rock2.receiveShadow=true; scene.add(rock2);
       // a cap of moss on every other rock — wet green, like a real pond shore
       if(ri3%2===0){ var moss=new THREE.Mesh(new THREE.SphereGeometry(0.34+rnd(ri3*53)*0.2,7,6), mat(ri3%4===0?0x4d7a35:0x5d8a4a,{roughness:1})); moss.position.set(p[0],0.42+rnd(ri3*31)*0.25,p[1]); moss.scale.y=0.35; scene.add(moss); }
     });
@@ -3079,6 +3188,7 @@ var SceneFX = (function(){
       }
       tree.scale.setScalar(0.9+rnd(ti*41)*0.65);
       tree.position.set(p[0],-0.2,p[1]); scene.add(tree);
+      swayers.push({ grp:tree, phase:ti*1.91, amp:0.008, speed:0.55 });
     });
     // a wide sandy patch where the pier meets the shore — worn pale sand
     // over the grass rim, the landing everybody walks in on
@@ -3093,6 +3203,7 @@ var SceneFX = (function(){
         blade2.rotation.z=(rb-2.5)*0.09;
       }
       reeds.position.set(p[0],0,p[1]); scene.add(reeds);
+      swayers.push({ grp:reeds, phase:ri4*2.13, amp:0.06, speed:1.05 });
     });
     var tuftGreens=[0x4d7a35,0x68a24e,0x86c06a,0x5d8a4a];
     for(var gi=0;gi<44;gi++){ // grass tufts + shore flowers, in varied greens
@@ -3101,6 +3212,7 @@ var SceneFX = (function(){
       for(var gb=0;gb<3;gb++){ var cone2=new THREE.Mesh(new THREE.ConeGeometry(0.07,0.42+rnd(gb*7+gi)*0.3,5), mat(tuftGreens[(gb+gi)%4],{roughness:1})); cone2.position.set((gb-1)*0.11,0.2,(gb-1)*0.06); cone2.rotation.z=(gb-1)*0.22; tuft.add(cone2); }
       if(gi%5===0) put(tuft, box(0.11,0.11,0.11, gi%15===0?0xc9a8e0:(gi%10===0?0xf6c6dd:0xffe9a8),{roughness:0.6}), 0.15,0.42,0.1);
       tuft.position.set(Math.cos(ga)*gr,-0.05,Math.sin(ga)*gr); scene.add(tuft);
+      swayers.push({ grp:tuft, phase:gi*0.61, amp:0.07, speed:1.2 });
     }
     for(var ci2=0;ci2<5;ci2++){ // boxy drifting clouds
       var cloud=new THREE.Group();
@@ -3392,6 +3504,20 @@ var SceneFX = (function(){
     });
     goldie.scale.setScalar(1.3);
     scene.add(goldie);
+    // a small school drifting UNDER the surface — dark silhouettes at
+    // y=0.015, above the opaque water base but beneath the tinted depth
+    // bands, so they read as fish below the surface, circling slowly
+    (function(){
+      var schoolCols=[0x0d4a63,0x14506e,0x0a4260];
+      for(var sfi=0;sfi<5;sfi++){
+        var sf=makeFish(schoolCols[sfi%3], 0.85);
+        sf.traverse(function(ch){ if(ch.isMesh){ ch.castShadow=false; ch.material=new THREE.MeshBasicMaterial({ color:schoolCols[sfi%3], transparent:true, opacity:0.42, depthWrite:false }); } });
+        sf.position.y=0.015;
+        scene.add(sf);
+        schoolFish.push({ grp:sf, ang:sfi*1.35, rad:8.6+sfi*1.15, sp:0.055+(sfi%3)*0.018, ph:sfi*1.7, tail:null });
+        sf.children.forEach(function(ch){ if(ch.geometry && ch.geometry.type==="ConeGeometry" && ch.position.x<0) schoolFish[sfi].tail=ch; });
+      }
+    })();
     // monster + shark fin + particles + confetti
     monster=makeMonster(); monster.position.set(0,-2.6,0.6); scene.add(monster);
     sharkFin=new THREE.Group();
@@ -3601,6 +3727,29 @@ var SceneFX = (function(){
       r.scale.setScalar(0.6+ph*2.4); r.material.opacity=0.26*(1-ph);
     });
     if(sparklePts){ sparklePts.material.opacity=0.42+0.3*Math.sin(t*2.3); sparklePts.rotation.y=t*0.008; }
+    // living water surface: the detail maps drift in opposite directions,
+    // so the surface visibly flows and shimmers instead of sitting still
+    if(waterDetailTex){ waterDetailTex.offset.set((t*0.006)%1, (t*0.0024)%1); }
+    if(sheenDetailTex){ sheenDetailTex.offset.set((-t*0.0045)%1, (t*0.0035)%1); }
+    // lily pads bobbing on the swell
+    lilies.forEach(function(L){
+      L.grp.position.y=L.baseY+Math.sin(t*1.4+L.phase)*0.028;
+      L.grp.rotation.z=Math.sin(t*0.9+L.phase)*0.035;
+      L.grp.rotation.x=Math.cos(t*0.7+L.phase)*0.03;
+    });
+    // breeze: reeds, cattails, grass tufts and trees sway gently
+    swayers.forEach(function(S){
+      S.grp.rotation.z=Math.sin(t*S.speed+S.phase)*S.amp;
+      S.grp.rotation.x=Math.cos(t*S.speed*0.8+S.phase)*S.amp*0.6;
+    });
+    // the school circling under the surface, tails wiggling
+    schoolFish.forEach(function(F){
+      F.ang+=dt*F.sp*(1+whirlBoost*0.25);
+      F.grp.position.set(Math.cos(F.ang)*F.rad, 0.015, Math.sin(F.ang)*F.rad);
+      F.grp.rotation.y=-F.ang-Math.PI/2;
+      F.grp.rotation.z=Math.sin(t*2.2+F.ph)*0.05;
+      if(F.tail) F.tail.rotation.y=Math.sin(t*6+F.ph)*0.35;
+    });
     if(fireflyPts){
       var fp=fireflyPts.geometry.attributes.position.array;
       for(var fi2=0;fi2<fireflyBase.length;fi2++){

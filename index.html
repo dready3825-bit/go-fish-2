@@ -164,7 +164,7 @@
     border:1px solid #083a44;touch-action:none;
   }
   @media (max-width:640px){
-    #sceneWrap{height:56vh;height:56dvh;min-height:360px}
+    #sceneWrap{height:68vh;height:68dvh;min-height:400px}
     .wrap{padding:10px 10px 28px}
     .topbar{padding:6px 9px;margin-bottom:8px}
     .banner{margin-top:8px;padding:7px 10px;font-size:13px}
@@ -361,7 +361,7 @@
   #game .turn-banner{flex-basis:100%;order:5;text-align:center;background:var(--gp);border:1.5px solid var(--gl);color:var(--gtsoft);border-radius:999px;padding:4px 12px;font-size:13.5px}
   #game .turn-banner.yours{color:var(--accent);border-color:var(--accent)}
   #sceneWrap{height:min(76vh,820px);min-height:440px}
-  @media (max-width:640px){ #sceneWrap{height:56vh;height:56dvh;min-height:360px} }
+  @media (max-width:640px){ #sceneWrap{height:68vh;height:68dvh;min-height:400px} }
   #game .banner{
     background:linear-gradient(160deg,#f7b733,#f5a524);color:#3a2403;font-weight:600;text-align:left;
     padding:10px 14px 10px 38px;position:relative;border-radius:14px;font-size:14px;
@@ -482,7 +482,7 @@
     #game .chip{padding:4px 9px;font-size:12px}
     #game .icon-btn{padding:4px 10px;font-size:13px}
     #game .turn-banner{padding:3px 10px;font-size:13px}
-    #sceneWrap{height:56vh;height:56dvh;min-height:360px}
+    #sceneWrap{height:68vh;height:68dvh;min-height:400px}
     #game .banner{margin-top:6px;padding:7px 10px 7px 32px;font-size:13px}
     #game .banner::before{left:11px}
     #game .hand-panel{margin-top:6px;padding:8px 9px}
@@ -2385,13 +2385,16 @@ window.__gf = {
 /* ---------------- 3D pond scene (Three.js) — AAA visual pass ----------------
    Boxy computer-game style, chilled and simple, but detailed everywhere:
    a dressed pier (wood-grain planks, nails, rope, lanterns, bait bucket,
-   stringer, GO FISH sign, braced barnacled pilings), a dressed boat
-   (plank seams, cushions, anchor on a rope, spinning propeller, wake),
+   stringer, braced barnacled pilings — its water end kept completely
+   clear so the pier angler stands right at the end, rod over the water),
+   a proper little fishing boat (shaped planked hull with a painted
+   stripe, bench seats, outboard motor, oars, tackle box, cooler,
+   coiled rope, anchor on a rope, spinning propeller, V-wake trailing),
    two anglers with faces, hats, vests, blinking eyes, casting / reeling
    arms and banner-matched reactions, segmented rods with spinning reels,
    sagging line and striped bobbers, a funnel whirlpool with spiral foam
    arms and orbiting debris, layered waves, sun sparkles, lily pads,
-   cattails, jumping fish, Goldie, dragonflies, fireflies — and an
+   cattails, Goldie, a sunning turtle and a heron — and an
    animation for everything the yellow banner says happened.
    The pier (seat 0) sits at the south edge, the boat (seat 1) at the
    north, the whirlpool in the middle. The camera always sits on the
@@ -2406,7 +2409,8 @@ var SceneFX = (function(){
   var monster=null, monsterJaw=null, monsterAnim=null;
   var anglers={ pier:null, boat:null }, turnRing=null;
   var ripples=[], waves=[], clouds=[], dragonflies=[], jumpers=[], wakes=[], timers=[];
-  var sparklePts=null, fireflyPts=null, fireflyBase=[];
+  var sparklePts=null, sparklePts2=null, fireflyPts=null, fireflyBase=[];
+  var lapWaves=[], vWake=null;
   var splashPts=null, splashVel=[], splashT=9, burstPts=null, burstVel=[], burstT=9;
   var flights=[], ringsFx=[], fogFx=[];
   var confetti=null, confettiData=[], confettiT=9;
@@ -2444,23 +2448,6 @@ var SceneFX = (function(){
     var tx=new THREE.CanvasTexture(cv); if("colorSpace" in tx && THREE.SRGBColorSpace) tx.colorSpace=THREE.SRGBColorSpace;
     return tx;
   }
-  function signTexture(){
-    var cv=document.createElement("canvas"); cv.width=512; cv.height=192;
-    var g=cv.getContext("2d");
-    g.fillStyle="#7c4f27"; g.fillRect(0,0,512,192);
-    for(var i=0;i<16;i++){ var y=rnd(i*5)*192; g.strokeStyle="rgba(50,30,10,.25)"; g.lineWidth=2; g.beginPath(); g.moveTo(0,y); g.lineTo(512,y+(rnd(i*9)-0.5)*8); g.stroke(); }
-    g.strokeStyle="#f5d9a0"; g.lineWidth=8; g.strokeRect(10,10,492,172);
-    g.fillStyle="#fdf8ec"; g.font="900 84px Georgia,serif"; g.textAlign="center"; g.textBaseline="middle";
-    g.fillText("GO FISH",256,82);
-    // little fish under the words
-    g.fillStyle="#f5a524";
-    g.beginPath(); g.ellipse(216,148,34,15,0,0,Math.PI*2); g.fill();
-    g.beginPath(); g.moveTo(246,148); g.lineTo(272,132); g.lineTo(272,164); g.closePath(); g.fill();
-    g.fillStyle="#17323e"; g.beginPath(); g.arc(198,144,4,0,Math.PI*2); g.fill();
-    g.fillStyle="#f5a524"; g.font="30px Georgia,serif"; g.fillText("~ the pond ~",330,150);
-    var tx=new THREE.CanvasTexture(cv); if("colorSpace" in tx && THREE.SRGBColorSpace) tx.colorSpace=THREE.SRGBColorSpace;
-    return tx;
-  }
   function cardFrontTexture(rank,suit){
     var cv=document.createElement("canvas"); cv.width=128; cv.height=176;
     var g=cv.getContext("2d");
@@ -2490,6 +2477,16 @@ var SceneFX = (function(){
     g.fillStyle="#083a44"; g.beginPath(); g.arc(50,88,3.4,0,Math.PI*2); g.fill();
     var tx=new THREE.CanvasTexture(cv); if("colorSpace" in tx && THREE.SRGBColorSpace) tx.colorSpace=THREE.SRGBColorSpace;
     return tx;
+  }
+  function sparkleTexture(){
+    var cv=document.createElement("canvas"); cv.width=64; cv.height=64;
+    var g=cv.getContext("2d");
+    var grad=g.createRadialGradient(32,32,2,32,32,30);
+    grad.addColorStop(0,"rgba(255,255,255,1)"); grad.addColorStop(0.35,"rgba(255,255,255,.85)"); grad.addColorStop(1,"rgba(255,255,255,0)");
+    g.fillStyle=grad; g.beginPath(); g.arc(32,32,30,0,Math.PI*2); g.fill();
+    g.fillStyle="rgba(255,255,255,.95)";
+    g.beginPath(); g.moveTo(32,2); g.lineTo(37,27); g.lineTo(62,32); g.lineTo(37,37); g.lineTo(32,62); g.lineTo(27,37); g.lineTo(2,32); g.lineTo(27,27); g.closePath(); g.fill();
+    return new THREE.CanvasTexture(cv);
   }
   function frontTexFor(id){
     if(!id) return backTex;
@@ -2544,12 +2541,14 @@ var SceneFX = (function(){
         put(grp, box(0.24,0.22,0.72,pants), x,0.6,0.28);            // thighs forward
         put(grp, box(0.22,0.58,0.24,pants), x,0.28,0.58);           // shins down
         put(grp, box(0.24,0.11,0.4,0x2a2320), x,0.055,0.66);        // shoes
+        put(grp, box(0.25,0.045,0.42,0xfdf8ec,{roughness:0.5}), x,0.022,0.66); // white shoe soles
       });
       bodyBaseY=0.66;
     } else {
       [-0.17,0.17].forEach(function(x){
         put(grp, box(0.25,0.95,0.27,pants), x,0.48,0);
         put(grp, box(0.27,0.12,0.44,0x2a2320), x,0.06,0.07);
+        put(grp, box(0.28,0.045,0.46,0xfdf8ec,{roughness:0.5}), x,0.022,0.07); // white shoe soles
       });
       bodyBaseY=0.95;
     }
@@ -2562,6 +2561,10 @@ var SceneFX = (function(){
     put(bodyG, box(0.13,0.13,0.03,0xf5a524), -0.22,0.3,0.28);
     put(bodyG, box(0.13,0.13,0.03,0x2e7d9e),  0.22,0.3,0.28);
     put(bodyG, box(0.82,0.1,0.48,0x241d16), 0,0.0,0);
+    // creel bag at the left hip on a diagonal shoulder strap — tackle-carrier detail
+    put(bodyG, box(0.3,0.34,0.15,0x8a6b42,{roughness:0.85}), -0.53,-0.05,0.02);
+    put(bodyG, box(0.31,0.07,0.16,0x6b4423,{roughness:0.85}), -0.53,0.14,0.02);
+    var strap=put(bodyG, box(0.09,0.98,0.02,0x6b4423,{roughness:0.85}), 0.04,0.42,0.25); strap.rotation.z=0.58;
     put(bodyG, cyl(0.09,0.1,0.14,skin), 0,0.86,0);
     // head group
     var headG=new THREE.Group(); headG.position.y=1.24; bodyG.add(headG); u.headG=headG;
@@ -2667,7 +2670,7 @@ var SceneFX = (function(){
     setMouth(a, type==="happy"||type==="celebrate" ? "happy" : type==="sad"||type==="slump"||type==="ouch" ? "sad" : type==="shake" ? "neutral" : type==="wow" ? "o" : "neutral");
   }
   function later(sec,fn){ timers.push({ at:(Date.now()-clockStart)/1000+sec, fn:fn }); }
-  function handPos(a){ return a.position.clone().add(new THREE.Vector3(0,2.7,0)); }
+  function handPos(a){ return a.position.clone().add(new THREE.Vector3(0,2.7*(a.scale.x/1.38),0)); }
 
   /* ---------------- pond monster ---------------- */
   function makeMonster(){
@@ -2726,7 +2729,7 @@ var SceneFX = (function(){
     var pos=splashPts.geometry.attributes.position.array;
     for(var i=0;i<splashVel.length;i++){
       pos[i*3]=cx+(Math.random()-0.5)*0.8; pos[i*3+1]=0.15; pos[i*3+2]=cz+(Math.random()-0.5)*0.8;
-      splashVel[i].set((Math.random()-0.5)*2.8, 2.2+Math.random()*(big?3.8:2.2), (Math.random()-0.5)*2.8);
+      splashVel[i].set((Math.random()-0.5)*3.4, 2.9+Math.random()*(big?4.8:2.9), (Math.random()-0.5)*3.4);
     }
     splashPts.geometry.attributes.position.needsUpdate=true;
     splashPts.visible=true; splashT=0;
@@ -2946,6 +2949,11 @@ var SceneFX = (function(){
     scene.background=new THREE.Color(0x7ec3e0);
     scene.fog=new THREE.Fog(0x7ec3e0, 42, 88);
     camera=new THREE.PerspectiveCamera(54, 1, 0.1, 200);
+    // NO POST-PROCESSING — deliberately. An earlier build's bloom pass
+    // blew the pond out to a blinding white glare on iPhone and left a
+    // blank white canvas on Android. The scene renders with the plain
+    // renderer only, exactly like the long-working version; all of the
+    // water's sparkle and foam comes from plain materials, never a pass.
     scene.add(new THREE.HemisphereLight(0xcfefff, 0x1d4e4a, 0.95));
     var sun=new THREE.DirectionalLight(0xfff2cf, 1.55); sun.position.set(10,18,8);
     sun.castShadow=true; sun.shadow.mapSize.set(1024,1024);
@@ -2956,35 +2964,92 @@ var SceneFX = (function(){
     backTex=cardBackTexture();
     var woodTex=woodTexture();
 
-    /* ----- pond: layered water, waves, sparkles, ripples ----- */
-    var water=new THREE.Mesh(new THREE.CircleGeometry(17.5,56), mat(0x1663a6,{roughness:0.3, metalness:0.12}));
+    /* ----- pond water: layered depth, reflections, sparkles, ripples,
+       lapping waves — the prettiest part of the scene, still boxy ----- */
+    // LAYERED DEPTH: pale turquoise at the banks, bright blue, then royal
+    // blue, then deep navy in the middle around the whirlpool.
+    var water=new THREE.Mesh(new THREE.CircleGeometry(17.5,56), mat(0x1a86d8,{roughness:0.24, metalness:0.12}));
     water.rotation.x=-Math.PI/2; water.receiveShadow=true; scene.add(water);
-    var sheen=new THREE.Mesh(new THREE.CircleGeometry(17.5,56), mat(0x2b8fd4,{roughness:0.25, metalness:0.15, transparent:true, opacity:0.32}));
-    sheen.rotation.x=-Math.PI/2; sheen.position.y=0.015; scene.add(sheen);
-    var shallows=new THREE.Mesh(new THREE.RingGeometry(13.5,17.4,56), mat(0x5db9e8,{roughness:0.35, transparent:true, opacity:0.5}));
-    shallows.rotation.x=-Math.PI/2; shallows.position.y=0.02; scene.add(shallows);
-    var deepCenter=new THREE.Mesh(new THREE.CircleGeometry(6.4,40), mat(0x0b3a63,{roughness:0.3, transparent:true, opacity:0.55}));
-    deepCenter.rotation.x=-Math.PI/2; deepCenter.position.y=0.02; scene.add(deepCenter);
+    var sheen=new THREE.Mesh(new THREE.CircleGeometry(17.5,56), mat(0x54b6ec,{roughness:0.25, metalness:0.15, transparent:true, opacity:0.35}));
+    sheen.rotation.x=-Math.PI/2; sheen.position.y=0.012; scene.add(sheen);
+    // Depth bands are UNLIT (MeshBasicMaterial) with strong, saturated,
+    // clearly-stepped colors, so the gradient reads in a still screenshot:
+    // pale foam-turquoise at the very edge -> turquoise -> bright azure ->
+    // royal blue -> deep navy -> darkest navy core around the whirlpool.
+    function depthBand(geo,color,op,y){
+      var b=new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color:color, transparent:true, opacity:op }));
+      b.rotation.x=-Math.PI/2; b.position.y=y; scene.add(b); return b;
+    }
+    depthBand(new THREE.RingGeometry(13.4,17.4,56), 0x2fd4c4, 0.88, 0.016);   // turquoise shallows
+    depthBand(new THREE.RingGeometry(9.9,13.45,56), 0x1f9bf0, 0.75, 0.020);   // bright azure step
+    depthBand(new THREE.RingGeometry(6.2,9.95,56), 0x0d5bb5, 0.85, 0.024);    // royal blue
+    depthBand(new THREE.CircleGeometry(6.4,40), 0x073670, 0.94, 0.027);       // deep navy
+    depthBand(new THREE.CircleGeometry(3.9,36), 0x04264f, 0.96, 0.031);       // navy core
+    depthBand(new THREE.RingGeometry(15.9,17.48,56), 0xa5f2df, 0.90, 0.034);  // pale foam-turquoise edge
+    // SOFT REFLECTIONS on the surface: a dark soft shape + a light shimmer
+    // streak under the boat, and a long soft reflection under the dock.
+    var boatReflection=new THREE.Mesh(new THREE.CircleGeometry(3.6,28), new THREE.MeshBasicMaterial({ color:0x083a5e, transparent:true, opacity:0.42, depthWrite:false }));
+    boatReflection.rotation.x=-Math.PI/2; boatReflection.position.set(-2.4,0.036,-8.6); boatReflection.scale.set(1.08,0.64,1); scene.add(boatReflection);
+    var boatShimmer=new THREE.Mesh(new THREE.CircleGeometry(2.9,24), new THREE.MeshBasicMaterial({ color:0xaee6f7, transparent:true, opacity:0.30, depthWrite:false }));
+    boatShimmer.rotation.x=-Math.PI/2; boatShimmer.position.set(-1.9,0.04,-7.8); boatShimmer.scale.set(1.3,0.52,1); scene.add(boatShimmer);
+    var dockReflection=new THREE.Mesh(new THREE.PlaneGeometry(7.6,3.4), new THREE.MeshBasicMaterial({ color:0x5a4028, transparent:true, opacity:0.30, depthWrite:false }));
+    dockReflection.rotation.x=-Math.PI/2; dockReflection.position.set(0,0.036,6.4); scene.add(dockReflection);
+    var dockShimmer=new THREE.Mesh(new THREE.CircleGeometry(2.3,24), new THREE.MeshBasicMaterial({ color:0xaee6f7, transparent:true, opacity:0.26, depthWrite:false }));
+    dockShimmer.rotation.x=-Math.PI/2; dockShimmer.position.set(0.6,0.038,5.6); dockShimmer.scale.set(1.8,0.65,1); scene.add(dockShimmer);
+    // gentle wave rings drifting across the pond
     [4.6,6.6,9.2,11.8,14.2,16.2].forEach(function(r,i){
       var w=new THREE.Mesh(new THREE.RingGeometry(r-0.07,r+0.07,56), new THREE.MeshBasicMaterial({ color:0xd8f6fb, transparent:true, opacity:0.13, side:THREE.DoubleSide, depthWrite:false }));
       w.rotation.x=-Math.PI/2; w.position.y=0.035; w.userData.phase=i*1.1; scene.add(w); waves.push(w);
     });
-    (function(){ // sun sparkles
-      var n=140, arr=new Float32Array(n*3);
-      for(var i=0;i<n;i++){ var a=rnd(i*3)*Math.PI*2, rr=2+Math.sqrt(rnd(i*7))*15; arr[i*3]=Math.cos(a)*rr; arr[i*3+1]=0.06; arr[i*3+2]=Math.sin(a)*rr; }
-      var geo=new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(arr,3));
-      sparklePts=new THREE.Points(geo, new THREE.PointsMaterial({ color:0xfff3b0, size:0.17, transparent:true, opacity:0.65, depthWrite:false }));
-      scene.add(sparklePts);
+    // WAVES LAPPING THE BANKS: pale foam rings at the shoreline that
+    // swell in and fade out (animated in tick via lapWaves)
+    [16.55,17.05].forEach(function(r,i){
+      var lap=new THREE.Mesh(new THREE.RingGeometry(r,r+0.6,56), new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.2, side:THREE.DoubleSide, depthWrite:false }));
+      lap.rotation.x=-Math.PI/2; lap.position.y=0.042; lap.userData.phase=i*0.5+0.2; scene.add(lap); lapWaves.push(lap);
+    });
+    // CHUNKY BANK FOAM: white foam blobs scattered all along the shoreline
+    // — chunky enough to read as foam in a still screenshot
+    (function(){
+      var foamBankMat=new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.92 });
+      for(var bfi=0;bfi<56;bfi++){
+        var ba2=rnd(bfi*37+5)*Math.PI*2, br2=16.7+rnd(bfi*41)*0.8;
+        var blob=new THREE.Mesh(new THREE.SphereGeometry(0.15+rnd(bfi*43)*0.24,7,6), foamBankMat);
+        blob.position.set(Math.cos(ba2)*br2, 0.05, Math.sin(ba2)*br2);
+        blob.scale.y=0.45; blob.castShadow=false; scene.add(blob);
+      }
     })();
-    for(var i=0;i<8;i++){
-      var r=new THREE.Mesh(new THREE.RingGeometry(0.5,0.58,28), new THREE.MeshBasicMaterial({ color:0xbfeef5, transparent:true, opacity:0.25, side:THREE.DoubleSide, depthWrite:false }));
-      r.rotation.x=-Math.PI/2; r.position.set((rnd(i*31)-0.5)*24, 0.04, (rnd(i*47)-0.5)*24);
+    (function(){ // SUN GLINTS: clusters of bright star sparkles — each
+      // cluster is a knot of 4-point star sprites, big and white enough
+      // to read as sparkle clusters in a still screenshot
+      var tex=sparkleTexture();
+      function clusterPoints(nClusters, seed, size, color){
+        var pts=[];
+        for(var ci3=0;ci3<nClusters;ci3++){
+          var ca=rnd(ci3*17+seed)*Math.PI*2, cr=1.6+Math.sqrt(rnd(ci3*19+seed*3))*15.2;
+          var cx=Math.cos(ca)*cr, cz=Math.sin(ca)*cr;
+          var cnt=3+Math.floor(rnd(ci3*23+seed)*4);
+          for(var k2=0;k2<cnt;k2++) pts.push(cx+(rnd(ci3*29+k2*7+seed)-0.5)*1.15, 0.06+rnd(k2*3+ci3)*0.02, cz+(rnd(ci3*31+k2*11+seed)-0.5)*1.15);
+        }
+        var geo=new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pts),3));
+        return new THREE.Points(geo, new THREE.PointsMaterial({ map:tex, color:color, size:size, transparent:true, opacity:0.95, depthWrite:false, alphaTest:0.02 }));
+      }
+      sparklePts=clusterPoints(48,3,0.8,0xffffff); scene.add(sparklePts);
+      sparklePts2=clusterPoints(30,11,0.5,0xfff3b0); scene.add(sparklePts2);
+    })();
+    // MOVING RIPPLE RINGS all over the pond (expanding + fading in tick),
+    // including a few that live right by the boat and the dock end
+    var rippleSpots=[[-6.6,-5.9],[3.9,-6.6],[-1.2,-5.4],[3.4,6.2],[-3.1,5.4],[1.8,3.9],[7.8,-2.6],[-8.8,-4.4]];
+    for(var i=0;i<18;i++){
+      var r=new THREE.Mesh(new THREE.RingGeometry(0.44,0.66,28), new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.5, side:THREE.DoubleSide, depthWrite:false }));
+      r.rotation.x=-Math.PI/2;
+      if(i<rippleSpots.length) r.position.set(rippleSpots[i][0], 0.04, rippleSpots[i][1]);
+      else r.position.set((rnd(i*31)-0.5)*24, 0.04, (rnd(i*47)-0.5)*24);
       r.userData.phase=rnd(i*13)*Math.PI*2; scene.add(r); ripples.push(r);
     }
     // lily pads with flowers
-    [[5.8,4.4],[-7.6,3.2],[8.9,-3.4],[-6.4,-6.8],[3.4,9.6],[-10.8,-1.2],[11.5,4.8],[-3.8,11.8],[7.2,-9.4],[-12.4,7.6]].forEach(function(p,pi){
+    [[5.8,4.4],[-7.6,3.2],[8.9,-3.4],[-6.4,-6.8],[3.4,9.6],[-10.8,-1.2],[11.5,4.8],[-3.8,11.8],[7.2,-9.4],[-12.4,7.6],[-9.8,6.9],[12.6,-6.2],[-4.6,-11.6],[9.8,8.8]].forEach(function(p,pi){
       var pad=new THREE.Group();
-      var leaf=new THREE.Mesh(new THREE.CircleGeometry(0.55+rnd(pi*37)*0.4,12), mat(0x3f8f4f,{roughness:0.6}));
+      var leaf=new THREE.Mesh(new THREE.CircleGeometry(0.55+rnd(pi*37)*0.4,12), mat(pi%3===1?0x4da35a:(pi%3===2?0x35793f:0x3f8f4f),{roughness:0.6}));
       leaf.rotation.x=-Math.PI/2; pad.add(leaf);
       var notch=put(pad, box(0.16,0.02,0.3,0x1663a6), 0.4,0.005,0.15); notch.rotation.y=0.6;
       if(pi%3===0){ var fl=new THREE.Mesh(new THREE.SphereGeometry(0.13,8,6), mat(0xf6c6dd,{roughness:0.5})); fl.position.set(0.2,0.09,0.1); fl.scale.y=0.7; pad.add(fl); }
@@ -2992,7 +3057,7 @@ var SceneFX = (function(){
       pad.position.set(p[0],0.045,p[1]); pad.rotation.y=pi*1.3; scene.add(pad);
     });
     // cattail clusters
-    [[16.9,2.5],[-16.5,5.5],[15.8,-6.5],[-15.2,-8.2],[7.5,16.6],[-8.8,16.2],[12.5,12.8],[-13.5,11.5]].forEach(function(p,ci){
+    [[16.9,2.5],[-16.5,5.5],[15.8,-6.5],[-15.2,-8.2],[7.5,16.6],[-8.8,16.2],[12.5,12.8],[-13.5,11.5],[3.2,17.2],[-17.2,-1.5]].forEach(function(p,ci){
       var cluster=new THREE.Group();
       for(var ri2=0;ri2<5;ri2++){
         var h=1.5+rnd(ci*13+ri2*29)*1.1;
@@ -3009,7 +3074,7 @@ var SceneFX = (function(){
     shore.rotation.x=-Math.PI/2; shore.position.y=-0.3; shore.receiveShadow=true; scene.add(shore);
     var rim=new THREE.Mesh(new THREE.RingGeometry(17.5,19.6,56), mat(0xb59a67,{roughness:1}));
     rim.rotation.x=-Math.PI/2; rim.position.y=-0.02; scene.add(rim);
-    [[19.5,7],[-20,-4],[14,-17],[-11,19],[21,-11],[-19,13],[16.8,-3.5],[-16.9,-4.2]].forEach(function(p,ri3){
+    [[19.5,7],[-20,-4],[14,-17],[-11,19],[21,-11],[-19,13],[16.8,-3.5],[-16.9,-4.2],[12,18.6],[-21,3]].forEach(function(p,ri3){
       var rock=new THREE.Mesh(new THREE.DodecahedronGeometry(0.65+rnd(ri3*31)*0.6), mat(ri3%2?0x8b8f8c:0x7c8280,{roughness:1}));
       rock.position.set(p[0],0.05,p[1]); rock.rotation.set(ri3*0.7,ri3*1.3,ri3*0.4); rock.castShadow=true; scene.add(rock);
       var rock2=new THREE.Mesh(new THREE.DodecahedronGeometry(0.3+rnd(ri3*41)*0.25), mat(0x9aa09c,{roughness:1}));
@@ -3026,11 +3091,12 @@ var SceneFX = (function(){
       tree.scale.setScalar(0.9+rnd(ti*41)*0.65);
       tree.position.set(p[0],-0.2,p[1]); scene.add(tree);
     });
-    for(var gi=0;gi<30;gi++){ // grass tufts + shore flowers
+    var tuftGreens=[0x4d7a35,0x68a24e,0x86c06a,0x5d8a4a];
+    for(var gi=0;gi<46;gi++){ // grass tufts + shore flowers, in varied greens
       var ga=rnd(gi*53)*Math.PI*2, gr=18.3+rnd(gi*59)*3.4;
       var tuft=new THREE.Group();
-      for(var gb=0;gb<3;gb++){ var cone2=new THREE.Mesh(new THREE.ConeGeometry(0.07,0.42+rnd(gb*7+gi)*0.3,5), mat(gb%2?0x4d7a35:0x68a24e,{roughness:1})); cone2.position.set((gb-1)*0.11,0.2,(gb-1)*0.06); cone2.rotation.z=(gb-1)*0.22; tuft.add(cone2); }
-      if(gi%6===0) put(tuft, box(0.11,0.11,0.11, gi%12===0?0xf6c6dd:0xffe9a8,{roughness:0.6}), 0.15,0.42,0.1);
+      for(var gb=0;gb<3;gb++){ var cone2=new THREE.Mesh(new THREE.ConeGeometry(0.07,0.42+rnd(gb*7+gi)*0.3,5), mat(tuftGreens[(gb+gi)%4],{roughness:1})); cone2.position.set((gb-1)*0.11,0.2,(gb-1)*0.06); cone2.rotation.z=(gb-1)*0.22; tuft.add(cone2); }
+      if(gi%5===0) put(tuft, box(0.11,0.11,0.11, gi%15===0?0xc9a8e0:(gi%10===0?0xf6c6dd:0xffe9a8),{roughness:0.6}), 0.15,0.42,0.1);
       tuft.position.set(Math.cos(ga)*gr,-0.05,Math.sin(ga)*gr); scene.add(tuft);
     }
     for(var ci2=0;ci2<5;ci2++){ // boxy drifting clouds
@@ -3043,37 +3109,13 @@ var SceneFX = (function(){
       cloud.userData.speed=0.12+ci2*0.045;
       scene.add(cloud); clouds.push(cloud);
     }
-    // fireflies drifting over the shore grass
-    (function(){
-      var n=26, arr=new Float32Array(n*3);
-      for(var i=0;i<n;i++){
-        var a=rnd(i*61)*Math.PI*2, rr=18.5+rnd(i*67)*5;
-        fireflyBase.push({ x:Math.cos(a)*rr, y:0.7+rnd(i*71)*2.0, z:Math.sin(a)*rr, ph:rnd(i*73)*6.28 });
-        arr[i*3]=fireflyBase[i].x; arr[i*3+1]=fireflyBase[i].y; arr[i*3+2]=fireflyBase[i].z;
-      }
-      var geo=new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(arr,3));
-      fireflyPts=new THREE.Points(geo, new THREE.PointsMaterial({ color:0xffd98a, size:0.24, transparent:true, opacity:0.75, depthWrite:false }));
-      scene.add(fireflyPts);
-    })();
-    // dragonflies over the water
-    for(var dfi=0;dfi<4;dfi++){
-      var dfly=new THREE.Group();
-      var dbody=cyl(0.03,0.045,0.62, dfi%2?0x2e7d9e:0xad3a68,{roughness:0.4},6); dbody.rotation.x=Math.PI/2; dfly.add(dbody);
-      put(dfly, new THREE.Mesh(new THREE.SphereGeometry(0.07,8,6), mat(0x22201c)), 0,0.02,0.34);
-      var wingM=new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.55, side:THREE.DoubleSide });
-      var w1=new THREE.Mesh(new THREE.PlaneGeometry(0.55,0.15), wingM); w1.position.set(-0.3,0.06,0.05); dfly.add(w1);
-      var w2=new THREE.Mesh(new THREE.PlaneGeometry(0.55,0.15), wingM); w2.position.set(0.3,0.06,0.05); dfly.add(w2);
-      dfly.userData={ cx:(rnd(dfi*83)-0.5)*13, cz:(rnd(dfi*89)-0.5)*13, r:1.6+rnd(dfi*97)*1.6, sp:0.5+rnd(dfi*101)*0.4, ph:rnd(dfi*103)*6.28, w1:w1, w2:w2 };
-      scene.add(dfly); dragonflies.push(dfly);
-    }
-    // little fish that leap out of the pond now and then
-    for(var jfi=0;jfi<3;jfi++){
-      var jf=makeFish(jfi%2?0x7fb6c9:0xf28c1e, 0.8);
-      jf.visible=false; scene.add(jf);
-      jumpers.push({ fish:jf, t:0, wait:2+jfi*3.7, dur:1.05, from:new THREE.Vector3(), to:new THREE.Vector3(), splashed:false });
-    }
+    // (No dragonflies, fireflies or random leaping fish — pond dressing
+    // is only things that belong at a pond: lily pads, reeds, rocks,
+    // flowers, the log, ripples and reflections. Goldie stays — she's
+    // part of the game.)
 
-    /* ----- whirlpool: real funnel, spiral foam arms, orbiting debris ----- */
+    /* ----- whirlpool: real funnel, thick spiral FOAM with real motion,
+       foam clusters churning at the rim, orbiting debris ----- */
     whirl=new THREE.Group();
     var funnelWall=new THREE.Mesh(new THREE.CylinderGeometry(3.15,0.55,1.8,28,1,true), mat(0x0b3a63,{roughness:0.35, metalness:0.1, transparent:true, opacity:0.88, side:THREE.DoubleSide}));
     funnelWall.position.y=-0.82; whirl.add(funnelWall);
@@ -3081,17 +3123,29 @@ var SceneFX = (function(){
       var ring=new THREE.Mesh(new THREE.TorusGeometry(rad,0.095,8,42), mat(i2%2?0x1f7fc4:0x74c7ec,{roughness:0.3, metalness:0.1}));
       ring.rotation.x=Math.PI/2; ring.position.y=0.1-i2*0.11; whirl.add(ring);
     });
-    var foamMat=new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.75 });
-    for(var armI=0;armI<3;armI++){
-      for(var segI=0;segI<9;segI++){
-        var fr=3.05-segI*0.24, fa=armI*(Math.PI*2/3)+segI*0.42;
-        var foamBit=box(0.34-segI*0.02,0.07,0.2,foamMat); foamBit.castShadow=false;
+    // spiral foam arms — four arms, chunky boxy foam that spirals down in
+    var foamMat=new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.95 });
+    var foamMat2=new THREE.MeshBasicMaterial({ color:0xeafcff, transparent:true, opacity:0.85 });
+    for(var armI=0;armI<4;armI++){
+      for(var segI=0;segI<10;segI++){
+        var fr=3.05-segI*0.24, fa=armI*(Math.PI*2/4)+segI*0.42;
+        var foamBit=box(0.48-segI*0.024,0.1,0.3, segI%2?foamMat:foamMat2); foamBit.castShadow=false;
         foamBit.position.set(Math.cos(fa)*fr, 0.17-segI*0.05, Math.sin(fa)*fr);
         foamBit.rotation.y=-fa; whirl.add(foamBit);
       }
     }
-    var foamRim=new THREE.Mesh(new THREE.TorusGeometry(3.08,0.12,8,44), new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.5 }));
+    // foam clusters: little white foam blobs bobbing around the rim —
+    // the whole whirl group spins, so the foam churns with it
+    for(var fci=0;fci<18;fci++){
+      var fca=rnd(fci*67)*Math.PI*2, fcr=2.55+rnd(fci*71)*0.75;
+      var foamBlob=new THREE.Mesh(new THREE.SphereGeometry(0.13+rnd(fci*73)*0.13,7,6), foamMat);
+      foamBlob.position.set(Math.cos(fca)*fcr, 0.16+rnd(fci*79)*0.07, Math.sin(fca)*fcr);
+      foamBlob.scale.y=0.55; foamBlob.castShadow=false; whirl.add(foamBlob);
+    }
+    var foamRim=new THREE.Mesh(new THREE.TorusGeometry(3.08,0.16,8,44), new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.85 }));
     foamRim.rotation.x=Math.PI/2; foamRim.position.y=0.15; whirl.add(foamRim);
+    var foamRim2=new THREE.Mesh(new THREE.TorusGeometry(2.45,0.11,8,40), new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.7 }));
+    foamRim2.rotation.x=Math.PI/2; foamRim2.position.y=0.1; whirl.add(foamRim2);
     var glowDisc=new THREE.Mesh(new THREE.CircleGeometry(0.6,24), new THREE.MeshBasicMaterial({ color:0xbfeef5, transparent:true, opacity:0.8 }));
     glowDisc.rotation.x=-Math.PI/2; glowDisc.position.y=-0.55; whirl.add(glowDisc);
     scene.add(whirl);
@@ -3104,7 +3158,9 @@ var SceneFX = (function(){
       scene.add(dgrp); debris.push(dgrp);
     }
 
-    /* ----- pier: grain, nails, braces, barnacles, rope, lanterns, sign ----- */
+    /* ----- pier: grain, nails, braces, barnacles, rope, lanterns.
+       The water end of the dock is kept COMPLETELY CLEAR — no sign, no
+       rope swag, nothing standing in front of the pier angler. ----- */
     var pier=new THREE.Group();
     var woodMat=new THREE.MeshStandardMaterial({ map:woodTex, color:0xcfa06a, roughness:0.9 });
     var woodMat2=new THREE.MeshStandardMaterial({ map:woodTex, color:0xb98a52, roughness:0.9 });
@@ -3134,9 +3190,8 @@ var SceneFX = (function(){
       put(pier, box(0.14,0.14,7.8,0x7c4f27,{roughness:0.9}), x,1.98,12.5);
       for(var rz=0;rz<4;rz++) put(pier, box(0.12,0.84,0.12,0x7c4f27,{roughness:0.9}), x,1.55,9.4+rz*2.05);
     });
-    // rope swag across the two front posts + a hanging rope coil
-    pier.add(ropeCurve([new THREE.Vector3(-3.45,2.5,8.3), new THREE.Vector3(-1.7,2.05,8.15), new THREE.Vector3(0,2.5,8.3)],0.04));
-    pier.add(ropeCurve([new THREE.Vector3(0,2.5,8.3), new THREE.Vector3(1.7,2.08,8.15), new THREE.Vector3(3.45,2.5,8.3)],0.04));
+    // a hanging rope coil at the BACK of the pier (kept well behind the
+    // angler — the front of the dock stays open, nothing in front of her)
     for(var coi=0;coi<3;coi++){ var coil=new THREE.Mesh(new THREE.TorusGeometry(0.3-coi*0.03,0.045,6,18), mat(0xc9a86a,{roughness:0.95})); coil.position.set(-3.3,1.22+coi*0.08,15.6); coil.rotation.x=Math.PI/2; pier.add(coil); }
     // lantern posts at both front corners
     [[3.45,8.9],[-3.45,8.9]].forEach(function(p,li){
@@ -3144,16 +3199,8 @@ var SceneFX = (function(){
       var lant=makeLantern(1.15); lant.position.set(p[0],2.95,p[1]); pier.add(lant);
       put(pier, box(0.06,0.3,0.06,0x241d16), p[0],2.62,p[1]);
     });
-    // GO FISH sign across the front of the pier
-    (function(){
-      put(pier, box(0.16,1.7,0.16,0x54381c,{roughness:0.9}), -0.3,1.95,8.0);
-      put(pier, box(0.16,1.7,0.16,0x54381c,{roughness:0.9}), 2.7,1.95,8.0);
-      var signTex=signTexture();
-      var sideM=mat(0x7c4f27,{roughness:0.9});
-      var faceM=new THREE.MeshStandardMaterial({ map:signTex, roughness:0.85 });
-      var board=new THREE.Mesh(new THREE.BoxGeometry(3.4,1.15,0.12), [sideM,sideM,sideM,sideM,faceM,faceM]);
-      board.position.set(1.2,2.75,8.0); board.castShadow=true; pier.add(board);
-    })();
+    // (No sign at the end of the dock — it was removed for good. The pier
+    // angler stands at the very end with open water straight ahead.)
     // crates, tackle box, bait bucket with fish tails, spare rod, net, life ring
     var crate1=box(0.95,0.95,0.95,woodMat); crate1.position.set(2.75,1.64,14.6); crate1.rotation.y=0.3; pier.add(crate1);
     put(pier, box(1.0,0.1,1.0,0x7c4f27), 2.75,1.64,14.6).rotation.y=0.3;
@@ -3186,66 +3233,158 @@ var SceneFX = (function(){
     ringGrp.position.set(-3.55,1.9,11.2); ringGrp.rotation.y=Math.PI/2; pier.add(ringGrp);
     scene.add(pier);
 
-    /* ----- boat: seams, cushions, anchor + rope, motor, propeller, wake ----- */
-    var boat=new THREE.Group(); boat.position.set(-1.6,0.18,-11.4); boat.rotation.y=0.22; boatGroup=boat;
-    var hullMat=new THREE.MeshStandardMaterial({ map:woodTex, color:0xa8763e, roughness:0.82 });
-    var hull=box(4.7,0.55,1.95,hullMat); hull.position.y=0.18; boat.add(hull);
-    [-0.99,0.99].forEach(function(z){
-      var side=box(4.7,0.6,0.13,hullMat); side.position.set(0,0.62,z); boat.add(side);
-      put(boat, box(4.72,0.05,0.14,0x5a3a1a,{roughness:0.9}), 0,0.42,z); // plank seam
-      put(boat, box(4.72,0.05,0.14,0x5a3a1a,{roughness:0.9}), 0,0.78,z);
-      put(boat, box(4.95,0.13,0.26,0xc79a63,{roughness:0.85}), 0,0.95,z*1.02); // gunwale
+    /* ----- THE BOAT — a proper little fishing boat with character -----
+       Shaped hull (narrow bottom, flared planked sides, tapered bow, flat
+       transom stern), plank seams, a painted teal stripe with a white
+       pinstripe, three bench seats, an outboard motor, two oars in
+       oarlocks, a tackle box, a cooler, a coiled rope, an anchor hanging
+       on its rope, and a proper V-WAKE trailing behind the stern. */
+    var boat=new THREE.Group(); boat.position.set(-2.4,0.18,-8.6); boat.rotation.y=0.22; boatGroup=boat;
+    var hullMat=new THREE.MeshStandardMaterial({ map:woodTex, color:0xbb8547, roughness:0.82 });
+    var hullDark=mat(0x7c4f27,{roughness:0.9});
+    // hull bottom (narrower than the top — a real hull shape, not a box)
+    put(boat, box(4.5,0.34,1.5,hullDark), 0,0.02,0);
+    put(boat, box(4.6,0.16,1.7,hullMat), 0,0.2,0);
+    // flared planked sides: three plank courses per side, stepping outward
+    [-1,1].forEach(function(sideSign){
+      var zLow=0.78*sideSign, zMid=0.92*sideSign, zTop=1.0*sideSign;
+      put(boat, box(4.7,0.3,0.12,hullMat), 0,0.36,zLow);          // lower plank course
+      put(boat, box(4.7,0.3,0.12,hullMat), 0,0.64,zMid);          // middle plank course
+      put(boat, box(4.7,0.3,0.12,hullMat), 0,0.9,zTop);           // top plank course
+      // plank seams: thin dark lines between the courses + vertical ticks
+      put(boat, box(4.72,0.045,0.135,0x5a3a1a,{roughness:0.9}), 0,0.5,zMid*0.97);
+      put(boat, box(4.72,0.045,0.135,0x5a3a1a,{roughness:0.9}), 0,0.77,zTop*0.98);
+      for(var seamX=-1.8;seamX<=1.9;seamX+=0.92) put(boat, box(0.04,0.82,0.135,0x5a3a1a,{roughness:0.9}), seamX,0.63,(zMid+zTop)/2);
+      // PAINTED STRIPE along the middle course + a white pinstripe above it
+      put(boat, box(4.76,0.27,0.15,0x12b8d4,{roughness:0.45}), 0,0.62,sideSign*0.935);
+      put(boat, box(4.76,0.09,0.15,0xfdf8ec,{roughness:0.5}), 0,0.85,sideSign*0.975);
+      // gunwale rail capping the top edge
+      put(boat, box(4.95,0.13,0.28,0x12b8d4,{roughness:0.45}), 0,1.08,sideSign*1.02);
     });
-    var bow=box(1.6,0.85,1.95,hullMat); bow.position.set(2.85,0.5,0); bow.rotation.y=Math.PI/4; bow.scale.set(1,1,0.72); boat.add(bow);
-    put(boat, box(4.3,0.14,1.65,0xc79a63,{roughness:0.9}), 0,0.42,0); // floor
-    [-1.25,0.75].forEach(function(x){
-      put(boat, box(0.55,0.34,1.7,0x6b4423,{roughness:0.9}), x,0.55,0);
-      put(boat, box(0.52,0.13,1.58,0xc23325,{roughness:0.65}), x,0.86,0); // cushion
-      put(boat, box(0.52,0.03,0.2,0x8f1f14,{roughness:0.65}), x,0.93,0);
+    // tapered BOW: stacked, narrowing, angled sections + a prow post
+    var bow1=box(1.5,0.8,1.8,hullMat); bow1.position.set(2.75,0.48,0); bow1.rotation.y=Math.PI/4; bow1.scale.set(1,1,0.72); boat.add(bow1);
+    var bow2=box(1.1,0.62,1.35,hullMat); bow2.position.set(3.25,0.55,0); bow2.rotation.y=Math.PI/4; bow2.scale.set(1,1,0.66); boat.add(bow2);
+    put(boat, box(0.95,0.26,1.0,0x12b8d4,{roughness:0.45}), 3.0,0.64,0).rotation.y=Math.PI/4; // stripe wrapping the bow
+    put(boat, box(0.16,0.95,0.16,hullDark), 3.62,0.78,0); // prow post
+    put(boat, box(1.15,0.12,1.3,0xc79a63,{roughness:0.85}), 2.9,1.06,0); // bow deck cap
+    // flat TRANSOM stern with its own stripe
+    put(boat, box(0.14,0.95,1.95,hullMat), -2.38,0.55,0);
+    put(boat, box(0.15,0.27,1.9,0x12b8d4,{roughness:0.45}), -2.39,0.62,0);
+    put(boat, box(2.2,0.14,0.24,0x12b8d4,{roughness:0.45}), -2.38,1.08,0);
+    // interior floorboards with gaps between the planks
+    for(var fbi=0;fbi<5;fbi++) put(boat, box(4.2,0.09,0.28,0xc79a63,{roughness:0.9}), 0,0.4,-0.62+fbi*0.31);
+    // THREE BENCH SEATS across the boat, on little supports. The middle
+    // bench (x 0.3) carries a red cushion — that is where the boat
+    // angler SITS (his position in the anglers block matches it exactly).
+    [-1.45,0.3,1.75].forEach(function(bx){
+      put(boat, box(0.58,0.11,1.78,0xdbb77e,{roughness:0.85}), bx,0.74,0);
+      put(boat, box(0.4,0.3,0.12,0x6b4423,{roughness:0.9}), bx,0.55,-0.68);
+      put(boat, box(0.4,0.3,0.12,0x6b4423,{roughness:0.9}), bx,0.55,0.68);
     });
-    // outboard motor + spinning propeller
-    put(boat, box(0.24,0.3,0.5,0x3d4450,{roughness:0.5, metalness:0.3}), -2.5,0.8,0);
-    put(boat, box(0.52,0.55,0.42,0x2e3440,{roughness:0.45, metalness:0.3}), -2.62,1.12,0);
-    put(boat, box(0.3,0.08,0.08,0x2e3440,{roughness:0.5}), -2.3,1.25,0);
-    put(boat, box(0.13,0.85,0.13,0x3d4450,{roughness:0.5, metalness:0.3}), -2.66,0.3,0);
-    prop=new THREE.Group(); prop.position.set(-2.78,-0.18,0); boat.add(prop);
+    put(boat, box(0.54,0.09,1.6,0xc23325,{roughness:0.65}), 0.3,0.84,0);  // cushion on the middle bench
+    put(boat, box(0.54,0.025,0.22,0x8f1f14,{roughness:0.65}), 0.3,0.9,0); // cushion stripe
+    // OUTBOARD MOTOR on the transom: bracket, cowling with a teal band,
+    // tiller handle, shaft, fin, and the spinning propeller
+    put(boat, box(0.22,0.34,0.44,0x3d4450,{roughness:0.5, metalness:0.3}), -2.52,0.82,0);
+    put(boat, box(0.54,0.58,0.44,0x2e3440,{roughness:0.45, metalness:0.3}), -2.68,1.16,0);
+    put(boat, box(0.56,0.18,0.46,0x12b8d4,{roughness:0.45}), -2.68,1.24,0); // motor stripe
+    put(boat, box(0.3,0.09,0.09,0x2e3440,{roughness:0.5}), -2.34,1.3,0);   // carry handle
+    var tiller=put(boat, cyl(0.035,0.035,0.85,0x22262e,{roughness:0.5, metalness:0.3},7), -2.2,1.05,0.12); tiller.rotation.z=1.25; // tiller arm into the boat
+    put(boat, box(0.13,0.9,0.13,0x3d4450,{roughness:0.5, metalness:0.3}), -2.72,0.3,0);
+    put(boat, box(0.3,0.36,0.04,0x3d4450,{roughness:0.5, metalness:0.3}), -2.76,-0.12,0); // fin
+    prop=new THREE.Group(); prop.position.set(-2.84,-0.18,0); boat.add(prop);
     put(prop, cyl(0.07,0.07,0.16,0x8b949c,{metalness:0.6,roughness:0.3},8), 0,0,0).rotation.z=Math.PI/2;
     for(var pb=0;pb<3;pb++){
       var blade=box(0.02,0.36,0.15,0xb9c2c9,{metalness:0.55,roughness:0.35});
       blade.position.y=0.16;
       var holder=new THREE.Group(); holder.rotation.x=pb*(Math.PI*2/3); holder.add(blade); prop.add(holder);
     }
-    // wake: foam rings trailing the stern, forever cycling
-    for(var wi=0;wi<6;wi++){
-      var wk=new THREE.Mesh(new THREE.RingGeometry(0.42,0.58,20), new THREE.MeshBasicMaterial({ color:0xeafcff, transparent:true, opacity:0.4, side:THREE.DoubleSide, depthWrite:false }));
-      wk.rotation.x=-Math.PI/2; wk.position.set(-3.3-wi*0.85,-0.12,(wi%2?0.3:-0.3));
-      boat.add(wk); wakes.push({ mesh:wk, off:wi/6 });
+    // PROPER WAKE trailing the stern: churn foam right behind the motor,
+    // expanding foam rings cycling away, and a long V of foam strips
+    // opening out behind the boat (vWake, gently pulsed in tick).
+    for(var ch=0;ch<5;ch++){
+      var churn=box(0.42+rnd(ch*7)*0.3,0.06,0.34+rnd(ch*11)*0.26, new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.8 }));
+      churn.castShadow=false; churn.position.set(-2.95-rnd(ch*13)*0.5,-0.11,(rnd(ch*17)-0.5)*0.7); boat.add(churn);
     }
+    for(var wi=0;wi<8;wi++){
+      var wk=new THREE.Mesh(new THREE.RingGeometry(0.55,0.88,20), new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.4, side:THREE.DoubleSide, depthWrite:false }));
+      wk.rotation.x=-Math.PI/2; wk.position.set(-3.3-wi*0.8,-0.12,(wi%2?0.35:-0.35));
+      boat.add(wk); wakes.push({ mesh:wk, off:wi/8 });
+    }
+    vWake=new THREE.Group();
+    [-1,1].forEach(function(vs){
+      var strip=new THREE.Mesh(new THREE.PlaneGeometry(4.6,0.34), new THREE.MeshBasicMaterial({ color:0xeafcff, transparent:true, opacity:0.30, side:THREE.DoubleSide, depthWrite:false }));
+      strip.rotation.x=-Math.PI/2; strip.rotation.z=vs*0.42;
+      strip.position.set(-5.15,0,vs*1.05); vWake.add(strip);
+      var strip2=new THREE.Mesh(new THREE.PlaneGeometry(3.4,0.2), new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.22, side:THREE.DoubleSide, depthWrite:false }));
+      strip2.rotation.x=-Math.PI/2; strip2.rotation.z=vs*0.24;
+      strip2.position.set(-4.6,0,vs*0.55); vWake.add(strip2);
+    });
+    vWake.position.set(0,-0.115,0); boat.add(vWake);
     // anchor hanging off the bow on its rope
     var anchor=new THREE.Group(); anchor.position.set(2.35,-0.55,1.15); boat.add(anchor);
     put(anchor, cyl(0.045,0.045,0.85,0x4a5560,{metalness:0.55,roughness:0.4},7), 0,0.1,0);
     put(anchor, box(0.55,0.07,0.07,0x4a5560,{metalness:0.55,roughness:0.4}), 0,0.42,0);
     [-1,1].forEach(function(s){ var fl2=put(anchor, new THREE.Mesh(new THREE.ConeGeometry(0.13,0.34,6), mat(0x4a5560,{metalness:0.55,roughness:0.4})), 0.2*s,-0.32,0); fl2.rotation.z=s*2.2; });
     boat.add(ropeCurve([new THREE.Vector3(2.3,0.95,1.0), new THREE.Vector3(2.5,0.4,1.18), new THREE.Vector3(2.36,-0.05,1.15)],0.03,0x8a6b42));
-    // bow lantern, cooler, bucket, oar, flag
+    // bow lantern post
     put(boat, cyl(0.05,0.06,0.75,0x241d16,{roughness:0.85},7), 2.15,1.25,0.75);
     var bLant=makeLantern(0.95); bLant.position.set(2.15,1.78,0.75); boat.add(bLant);
-    put(boat, box(0.8,0.5,0.55,0xfdf8ec,{roughness:0.5}), -1.95,0.72,-0.55);
-    put(boat, box(0.84,0.1,0.59,0x2e7d9e,{roughness:0.5}), -1.95,1.0,-0.55);
-    var bBucket=cyl(0.24,0.19,0.42,0xc23325,{roughness:0.55},11); bBucket.position.set(1.55,0.68,-0.6); boat.add(bBucket);
-    var oarGrp=new THREE.Group();
-    var oarShaft=cyl(0.045,0.045,2.6,0xa97a45,{roughness:0.9},7); oarGrp.add(oarShaft);
-    put(oarGrp, box(0.2,0.85,0.05,0xa97a45,{roughness:0.9}), 0,-1.6,0);
-    oarGrp.position.set(1.9,0.8,1.3); oarGrp.rotation.set(0.35,0,1.15); boat.add(oarGrp);
+    // COOLER (white, blue lid, handle + latch) on the rear floor
+    put(boat, box(0.82,0.5,0.56,0xfdf8ec,{roughness:0.5}), -1.95,0.7,-0.52);
+    put(boat, box(0.86,0.11,0.6,0x2e7d9e,{roughness:0.5}), -1.95,0.99,-0.52);
+    put(boat, box(0.2,0.07,0.05,0x8b949c,{metalness:0.5,roughness:0.4}), -1.95,0.9,-0.23);
+    var cHandle=new THREE.Mesh(new THREE.TorusGeometry(0.16,0.022,6,12,Math.PI), mat(0x8b949c,{metalness:0.5,roughness:0.4})); cHandle.position.set(-1.95,1.05,-0.52); boat.add(cHandle);
+    // TACKLE BOX (red, dark lid, handle, latches) by the front bench
+    var bTackle=box(0.85,0.4,0.44,0xc23325,{roughness:0.55}); bTackle.position.set(1.72,0.66,0.52); boat.add(bTackle);
+    put(boat, box(0.87,0.09,0.46,0x8f1f14,{roughness:0.55}), 1.72,0.89,0.52);
+    var tkHandle=new THREE.Mesh(new THREE.TorusGeometry(0.14,0.025,6,12,Math.PI), mat(0x5a6068,{metalness:0.5,roughness:0.4})); tkHandle.position.set(1.72,0.95,0.52); boat.add(tkHandle);
+    put(boat, box(0.09,0.12,0.03,0xd8b93a,{metalness:0.5,roughness:0.35}), 1.42,0.8,0.75);
+    put(boat, box(0.09,0.12,0.03,0xd8b93a,{metalness:0.5,roughness:0.35}), 2.02,0.8,0.75);
+    // RED FUEL TANK by the motor, with a dark cap and a fuel line to the cowling
+    put(boat, box(0.52,0.44,0.38,0xc23325,{roughness:0.5}), -2.02,0.68,0.52);
+    put(boat, box(0.54,0.08,0.4,0x8f1f14,{roughness:0.5}), -2.02,0.93,0.52);
+    put(boat, cyl(0.07,0.07,0.07,0x2a2320,{roughness:0.45},9), -2.02,1.0,0.52);
+    // WHITE FENDERS hanging over both sides on little ropes — instant "boat"
+    [1.15,-1.15].forEach(function(fx){
+      [-1,1].forEach(function(fs){
+        var fen=cyl(0.09,0.09,0.44,0xfdf8ec,{roughness:0.5},9); fen.position.set(fx,0.5,fs*1.16); boat.add(fen);
+        put(boat, box(0.04,0.3,0.04,0x8a6b42,{roughness:0.95}), fx,0.85,fs*1.1);
+      });
+    });
+    // red bait bucket
+    var bBucket=cyl(0.24,0.19,0.42,0xc23325,{roughness:0.55},11); bBucket.position.set(-0.85,0.66,-0.62); boat.add(bBucket);
+    // COILED ROPE on the bow floor
+    for(var bco=0;bco<3;bco++){ var bcoil=new THREE.Mesh(new THREE.TorusGeometry(0.27-bco*0.03,0.042,6,18), mat(0xc9a86a,{roughness:0.95})); bcoil.position.set(2.25,0.5+bco*0.075, -0.45); bcoil.rotation.x=Math.PI/2; boat.add(bcoil); }
+    // TWO OARS in oarlocks, blades trailing in the water either side,
+    // plus a spare oar laid along the floor
+    [-1,1].forEach(function(os){
+      put(boat, cyl(0.045,0.045,0.3,0x3d4450,{metalness:0.4,roughness:0.45},7), -0.55,1.12,os*1.05); // oarlock post
+      var oar=new THREE.Group();
+      var shaft=cyl(0.04,0.045,2.9,0xa97a45,{roughness:0.9},7); oar.add(shaft);
+      put(oar, box(0.22,0.95,0.05,0xa97a45,{roughness:0.9}), 0,-1.85,0); // blade
+      put(oar, cyl(0.055,0.055,0.3,0x6b4423,{roughness:0.9},7), 0,1.55,0); // grip
+      oar.position.set(-0.55,1.05,os*1.3); oar.rotation.set(os*0.5,0,1.92); boat.add(oar);
+    });
+    var spareOar=cyl(0.04,0.04,2.5,0xa97a45,{roughness:0.9},7); spareOar.position.set(0.4,0.52,0.78); spareOar.rotation.z=Math.PI/2; spareOar.rotation.y=0.12; boat.add(spareOar);
+    // little flag on a stern pole
     put(boat, cyl(0.03,0.03,1.5,0x6b4423,{roughness:0.9},6), -2.25,1.6,-0.8);
     var flag=box(0.55,0.34,0.03,0xf5a524,{roughness:0.6}); flag.position.set(-1.95,2.15,-0.8); boat.add(flag); boat.userData.flag=flag;
+    boat.scale.setScalar(1.2); // just a touch bigger than the original boat — still a boat, never a barge
     scene.add(boat);
 
     /* ----- anglers ----- */
     var youA=makeAngler({ shirt:0xf5a524, vest:0x14508c, hat:0xc23325, hatStyle:"cap", hair:0x5a3a1a, hairLong:true, beard:false, skin:0xf0c09a, seated:false, seed:3 });
-    youA.position.set(-2.2,1.16,11.4); youA.rotation.y=Math.PI; youA.scale.setScalar(1.38); scene.add(youA); anglers.pier=youA;
+    // Jenna's angler stands at the VERY END of the dock (the deck's water
+    // edge is z 8.05; she stands at z 8.95, centred, feet on the front
+    // planks) — nothing in front of her, rod out over the water.
+    youA.position.set(0,1.16,8.95); youA.rotation.y=Math.PI; youA.scale.setScalar(1.38); scene.add(youA); anglers.pier=youA;
     var oppA=makeAngler({ shirt:0x2e7d9e, vest:0x7a3a9e, hat:0x205a7a, hatStyle:"brim", hair:0x33302c, hairLong:false, beard:true, skin:0xc98a5e, seated:true, seed:7 });
-    oppA.position.set(-1.45,0.62,-11.3); oppA.rotation.y=0.22; oppA.scale.setScalar(1.38); scene.add(oppA); anglers.boat=oppA;
+    // The boat angler sits IN the boat, on the cushioned middle bench
+    // (boat-local x 0.3, boat scaled 1.2x at (-2.4,-8.6) -> world
+    // (-2.05,-8.68)), scaled WITH the boat so he keeps the exact same
+    // seated proportions in the hull.
+    oppA.position.set(-2.05,0.25,-8.68); oppA.rotation.y=0.22; oppA.scale.setScalar(1.66); scene.add(oppA); anglers.boat=oppA;
     [youA,oppA].forEach(function(a){
       scene.add(a.userData.bobber); scene.add(a.userData.line);
       var fwd=new THREE.Vector3(Math.sin(a.rotation.y),0,Math.cos(a.rotation.y));
@@ -3305,10 +3444,10 @@ var SceneFX = (function(){
       var pts=new THREE.Points(geo, new THREE.PointsMaterial({ color:color, size:size, transparent:true, opacity:0.95, depthWrite:false }));
       pts.visible=false; scene.add(pts); return pts;
     }
-    splashPts=makePoints(80,0xdff7ff,0.15);
-    for(var si=0;si<80;si++) splashVel.push(new THREE.Vector3());
-    burstPts=makePoints(70,0xffd98a,0.17);
-    for(var bi3=0;bi3<70;bi3++) burstVel.push(new THREE.Vector3());
+    splashPts=makePoints(110,0xdff7ff,0.27);
+    for(var si=0;si<110;si++) splashVel.push(new THREE.Vector3());
+    burstPts=makePoints(90,0xffd98a,0.3);
+    for(var bi3=0;bi3<90;bi3++) burstVel.push(new THREE.Vector3());
     confetti=new THREE.Group(); confetti.visible=false; scene.add(confetti);
     var confCols=[0xf5a524,0x1d9e7a,0xc23325,0x2e7d9e,0xfdf8ec,0xad3a68];
     for(var cfi=0;cfi<80;cfi++){
@@ -3445,7 +3584,7 @@ var SceneFX = (function(){
     var pos=pts.geometry.attributes.position.array;
     for(var i=0;i<vel.length;i++){
       pos[i*3]+=vel[i].x*dt; pos[i*3+1]+=vel[i].y*dt; pos[i*3+2]+=vel[i].z*dt;
-      vel[i].y-=6.5*dt;
+      vel[i].y-=9.8*dt;
       if(pos[i*3+1]<0) pos[i*3+1]=0;
     }
     pts.geometry.attributes.position.needsUpdate=true;
@@ -3466,31 +3605,28 @@ var SceneFX = (function(){
     debris.forEach(function(d){
       d.userData.ang+=dt*d.userData.sp*(1+whirlBoost*0.8);
       var a=d.userData.ang;
-      d.position.set(Math.cos(a)*d.userData.rad, 0.1+Math.sin(t*2.2+d.userData.ph)*0.06, Math.sin(a)*d.userData.rad);
+      var pullR=d.userData.rad-0.3*(0.5+0.5*Math.sin(t*0.8+d.userData.ph))-whirlBoost*0.55;
+      d.position.set(Math.cos(a)*pullR, 0.1+Math.sin(t*2.2+d.userData.ph)*0.06, Math.sin(a)*pullR);
       d.rotation.y=-a; d.rotation.z=Math.sin(t*1.8+d.userData.ph)*0.3;
     });
     // water life
     waves.forEach(function(w){
       var sc=1+Math.sin(t*1.25+w.userData.phase)*0.028;
       w.scale.set(sc,sc,1);
-      w.material.opacity=0.08+0.055*(0.5+0.5*Math.sin(t*0.9+w.userData.phase))+(stormT>0?0.1:0);
+      w.material.opacity=0.16+0.10*(0.5+0.5*Math.sin(t*0.9+w.userData.phase))+(stormT>0?0.1:0);
     });
     ripples.forEach(function(r){
       var ph=(t*0.32+r.userData.phase)%1;
-      r.scale.setScalar(0.6+ph*2.4); r.material.opacity=0.26*(1-ph);
+      r.scale.setScalar(0.6+ph*2.4); r.material.opacity=0.55*(1-ph);
     });
-    if(sparklePts){ sparklePts.material.opacity=0.42+0.3*Math.sin(t*2.3); sparklePts.rotation.y=t*0.008; }
-    if(fireflyPts){
-      var fp=fireflyPts.geometry.attributes.position.array;
-      for(var fi2=0;fi2<fireflyBase.length;fi2++){
-        var fb=fireflyBase[fi2];
-        fp[fi2*3]=fb.x+Math.sin(t*0.5+fb.ph)*0.9;
-        fp[fi2*3+1]=fb.y+Math.sin(t*0.8+fb.ph*2)*0.35;
-        fp[fi2*3+2]=fb.z+Math.cos(t*0.4+fb.ph)*0.9;
-      }
-      fireflyPts.geometry.attributes.position.needsUpdate=true;
-      fireflyPts.material.opacity=0.45+0.3*Math.sin(t*1.9);
-    }
+    if(sparklePts){ sparklePts.material.opacity=0.82+0.18*Math.sin(t*2.3); sparklePts.rotation.y=t*0.02; }
+    if(sparklePts2){ sparklePts2.material.opacity=0.66+0.26*Math.sin(t*3.1+1.7); sparklePts2.rotation.y=-t*0.014; }
+    lapWaves.forEach(function(lap){ // waves lapping the banks: swell + fade
+      var lph=(t*0.22+lap.userData.phase)%1;
+      var lsc=0.97+lph*0.045; lap.scale.set(lsc,lsc,1);
+      lap.material.opacity=0.62*(1-lph)*(0.7+0.3*Math.sin(t*0.9+lap.userData.phase*6));
+    });
+    if(vWake) vWake.children.forEach(function(vs2,vi2){ vs2.material.opacity=(vi2%2? 0.34:0.48)*(0.75+0.25*Math.sin(t*1.8+vi2*1.3)); });
     // goldie patrols the pond (and dashes in for Goldie's Gift)
     if(goldie){
       goldieDash=Math.max(0,goldieDash-dt);
@@ -3511,36 +3647,13 @@ var SceneFX = (function(){
       wakes.forEach(function(w){
         var ph=(t*0.45+w.off)%1;
         w.mesh.scale.setScalar(0.7+ph*2.5);
-        w.mesh.material.opacity=0.42*(1-ph);
+        w.mesh.material.opacity=0.65*(1-ph);
       });
     }
-    if(anglers.boat) anglers.boat.position.y=0.62+Math.sin(t*1.3)*0.07;
+    if(anglers.boat) anglers.boat.position.y=0.25+Math.sin(t*1.3)*0.07; // bobbing WITH the boat, seated on its bench
     clouds.forEach(function(cl){
       cl.position.x+=cl.userData.speed/60;
       if(cl.position.x>34) cl.position.x=-34;
-    });
-    dragonflies.forEach(function(d){
-      var u=d.userData;
-      var a=t*u.sp+u.ph;
-      d.position.set(u.cx+Math.cos(a)*u.r, 1.9+Math.sin(t*1.7+u.ph)*0.45, u.cz+Math.sin(a*0.85)*u.r);
-      d.rotation.y=-a+Math.PI/2;
-      var flap=Math.sin(t*42+u.ph)*0.65;
-      u.w1.rotation.z=0.25+flap; u.w2.rotation.z=-0.25-flap;
-    });
-    jumpers.forEach(function(j){
-      if(j.wait>0){ j.wait-=dt; if(j.wait<=0){
-        var a0=rnd(t*13)*Math.PI*2, rr=5.5+rnd(t*17)*5.5;
-        j.from.set(Math.cos(a0)*rr,0,Math.sin(a0)*rr);
-        j.to.set(Math.cos(a0+0.55)*rr,0,Math.sin(a0+0.55)*rr);
-        j.t=0; j.splashed=false; j.fish.visible=true;
-        doSplashAt(j.from.x,j.from.z,false);
-      } return; }
-      j.t+=dt; var k=j.t/j.dur;
-      if(k>=1){ j.fish.visible=false; j.wait=3+rnd(t*19)*5.5; doSplashAt(j.to.x,j.to.z,false); return; }
-      j.fish.position.lerpVectors(j.from,j.to,k);
-      j.fish.position.y=-0.15+Math.sin(k*Math.PI)*1.7;
-      j.fish.rotation.y=-Math.atan2(j.to.z-j.from.z,j.to.x-j.from.x);
-      j.fish.rotation.z=(0.5-k)*1.7;
     });
     // monster leap
     if(monsterAnim){
@@ -3654,13 +3767,16 @@ var SceneFX = (function(){
     }
     // camera from preset + seat side + drag orbit
     var sgn= seat===0 ? 1 : -1;
-    var base = preset==="top" ? new THREE.Vector3(0,20.5,19.5*sgn)
+    var base = preset==="top" ? new THREE.Vector3(0,19.8,18.8*sgn)
       : preset==="low" ? new THREE.Vector3(0,3.4,20.5*sgn)
       : new THREE.Vector3(0,14,22.5*sgn);
     var r=base.length(), theta=Math.atan2(base.x,base.z)+yaw, phi=Math.acos(base.y/r)+pitchOff;
     phi=Math.max(0.12, Math.min(1.45, phi));
     camera.position.set(r*Math.sin(phi)*Math.sin(theta), r*Math.cos(phi), r*Math.sin(phi)*Math.cos(theta));
-    camera.lookAt(0,0.4,0);
+    // the view is anchored a little toward YOUR side, so your dock fills
+    // the lower half of the frame and the pond opens out beyond it —
+    // standing on the dock, looking out, instead of a map from above.
+    camera.lookAt(0,0.4,2.8*sgn);
     renderer.render(scene,camera);
   }
 

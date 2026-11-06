@@ -129,11 +129,11 @@
   /* ---------- Scene ---------- */
   #sceneWrap{
     position:relative;border-radius:18px;overflow:hidden;box-shadow:var(--shadow);
-    height:min(54vh,540px);min-height:320px;background:linear-gradient(180deg,#79c7d4,#14707e 60%,#0b4a56);
+    height:min(72vh,760px);min-height:400px;background:linear-gradient(180deg,#79c7d4,#14707e 60%,#0b4a56);
     border:1px solid #083a44;touch-action:none;
   }
   @media (max-width:640px){
-    #sceneWrap{height:34vh;min-height:228px}
+    #sceneWrap{height:56vh;height:56dvh;min-height:360px}
     .wrap{padding:10px 10px 28px}
     .topbar{padding:6px 9px;margin-bottom:8px}
     .banner{margin-top:8px;padding:7px 10px;font-size:13px}
@@ -331,8 +331,8 @@
   #game #leaveBtn{color:#ff9d8a}
   #game .turn-banner{flex-basis:100%;order:5;text-align:center;background:var(--gp);border:1.5px solid var(--gl);color:var(--gtsoft);border-radius:999px;padding:4px 12px;font-size:13.5px}
   #game .turn-banner.yours{color:var(--accent);border-color:var(--accent)}
-  #sceneWrap{height:min(62vh,640px);min-height:360px}
-  @media (max-width:640px){ #sceneWrap{height:42vh;min-height:288px} }
+  #sceneWrap{height:min(76vh,820px);min-height:440px}
+  @media (max-width:640px){ #sceneWrap{height:56vh;height:56dvh;min-height:360px} }
   #game .banner{
     background:linear-gradient(160deg,#f7b733,#f5a524);color:#3a2403;font-weight:600;text-align:left;
     padding:10px 14px 10px 38px;position:relative;border-radius:14px;font-size:14px;
@@ -438,18 +438,19 @@
     .confetti-piece{animation:none;display:none}
     .pile.pop,.pile .count-badge.jump,#scoreChip.pulse{animation:none}
   }
-  /* ===== Phone fit: mod info above the hand, whole hand on the first screen =====
-     On a phone the scene gives up height and the cards/hand chrome tighten,
-     so the hand panel — with the selected mod's info panel above the cards —
-     ends above the browser bar with no scrolling, even when the hand wraps
-     to two rows. Desktop sizes above are untouched. */
+  /* ===== Phone: big pond window first =====
+     The pond / fisherman scene is the biggest thing on the screen.
+     Everything below it (banner, hand, pair piles in their usual place,
+     Pairs board, log) simply moves down to make room — the page is
+     taller for it, which is fine. The selected mod's info panel still
+     floats compactly above the hand so panel + full hand show together. */
   @media (max-width:640px){
     .wrap{padding:8px 8px 24px}
     #game .topbar{margin-bottom:6px;gap:4px}
     #game .chip{padding:4px 9px;font-size:12px}
     #game .icon-btn{padding:4px 10px;font-size:13px}
     #game .turn-banner{padding:3px 10px;font-size:13px}
-    #sceneWrap{height:26vh;height:26dvh;min-height:176px}
+    #sceneWrap{height:56vh;height:56dvh;min-height:360px}
     #game .banner{margin-top:6px;padding:7px 10px 7px 32px;font-size:13px}
     #game .banner::before{left:11px}
     #game .hand-panel{margin-top:6px;padding:8px 9px}
@@ -770,31 +771,31 @@ function askPhrase(card){ return "Do you have the " + askTargetLabel(card) + "?"
 
 var MODIFIERS = ["snatch","swap","peek","double","rip","sonar","magnet","monster","chum","anchor","trade","sense","shield","scope","storm","reel","fog","bait","lucky","mirror","whirl","shark","net","freeze","goldie"];
 var MODIFIER_INFO = {
-  snatch:{ name:"Blind Snatch", icon:"🎣", blurb:"STEAL: Grab 1 random card out of their hand and keep it — you don't choose it and you don't see it first. If it's the mate of a card you hold, it pairs on the spot. Pure theft, zero information." },
-  swap:{ name:"Swap Bait", icon:"🪱", blurb:"RECYCLE: Choose 1 dead card from your own hand, toss it back into the pond, and draw 1 fresh card. Use it to dump a card whose mate is already banked or gone — a 1-for-1 hand fix, nothing more." },
-  peek:{ name:"Peek", icon:"🔭", blurb:"SPY ON THEIR HAND: Secretly see the faces of up to 3 random cards in THEIR hand — the actual ranks and suits, so you can plan future asks and dodge wasted turns. It reveals their cards; it tells you nothing about the pond. They never learn which cards you saw." },
-  double:{ name:"Double Cast", icon:"✌️", blurb:"SAFE DRAW: Draw 2 cards from the pond, no strings attached — nobody else draws and nothing of yours is risked. The reliable way to grow your hand and hunt for mates." },
-  rip:{ name:"Rip Current", icon:"🌀", blurb:"DISRUPT + DRAW: A random card is torn out of THEIR hand and thrown back into the pond (they lose it, you do NOT keep it) — then you draw 1 from the pond. Hurts them and feeds you in the same play." },
-  sonar:{ name:"Sonar Ping", icon:"📡", blurb:"ONE-CARD CHECK: Pick ONE card in your hand and learn a single yes-or-no answer — do they hold that card's exact mate (same number + same color) right now? Nothing else is revealed: no other cards, no faces. Precise, narrow, certain." },
-  magnet:{ name:"Magnet Hook", icon:"🧲", blurb:"TARGETED STEAL: Arm it, then tap one of YOUR cards — the hook flies straight to that card's exact mate in their hand and rips it out, pairing instantly. If that mate isn't there, the hook comes up empty and the card is spent. Use Sonar or Mate Sense first so you don't waste it." },
-  monster:{ name:"Pond Monster", icon:"🐉", blurb:"GAMBLE ON YOURSELF: The monster leaps out and eats 1 random card from YOUR hand (it goes back to the pond) — then you fish 2 fresh cards. You trade one card you own for two chances at a pair. Risky when you're holding a pair-half; great when your hand is dead weight." },
-  chum:{ name:"Chum Bucket", icon:"🪣", blurb:"BIG DRAW, SHARED SMELL: Draw 3 cards from the pond — the biggest haul in the game — but the chum also lets THEM draw 1. Take it when three fresh chances for you outweigh one free card for them." },
-  anchor:{ name:"Anchor", icon:"⚓", blurb:"ANTI-THEFT SHIELD: Blocks the next TARGETED steal aimed at you — Blind Snatch, Rip Current, or Magnet Hook — and that attacker's card is wasted. Stays down until it blocks one. It does NOT stop Storm Surge." },
-  trade:{ name:"Fair Trade", icon:"🤝", blurb:"BLIND SWAP: You and they each give up 1 random card and take the other's — neither of you chooses or sees it first. A coin-flip reset: it can hand you a pair, hand THEM a pair, or just shake a stale hand loose." },
-  sense:{ name:"Mate Sense", icon:"🎯", blurb:"FULL-HAND SCAN: Learn, for EVERY card in your hand at once, which ones have their exact mate (same number + same color) sitting in their hand right now — the matching mates are listed for you. Wider than Sonar Ping (which checks one card), but it only flags mates — it never shows their other cards." },
-  shield:{ name:"Life Ring", icon:"🛡️", blurb:"ANTI-DISRUPTION SHIELD: Blocks the next AREA attack aimed at you — Blind Snatch, Rip Current, or Storm Surge — and that attacker's card is wasted. Stays up until it blocks one. It does NOT stop a targeted Magnet Hook — that's what Anchor is for." },
-  scope:{ name:"Deep Scope", icon:"🔍", blurb:"SPY ON THE POND: Look at the top 3 FISH cards of the POND (never their hand) and automatically keep the best one — a mate for your hand if one is there, otherwise the first card. Information plus a card: you see all three faces, even the two you leave behind." },
-  storm:{ name:"Storm Surge", icon:"⚡", blurb:"PURE DISRUPTION: Lightning scatters 2 random cards out of THEIR hand back into the pond. They fish 1 card back; you draw NOTHING. You gain no card and no information — you play it only to wreck their hand and break up mates they're holding." },
-  reel:{ name:"Reel In", icon:"🪝", blurb:"STEAL A BANKED PAIR: Haul one whole pair straight out of THEIR pair pile and bank it in YOUR pile — the score swings by 2 (they lose one, you gain one). Shields protect hands, not piles, so nothing blocks it. Useless while their pile is empty; devastating late." },
-  fog:{ name:"Fog Bank", icon:"🌫️", blurb:"HIDE YOUR HAND: A thick fog covers your hand through their whole next turn. They can't Peek, Sonar Ping, or Mate Sense you — every info modifier fizzles — and their asks are blind guesses. It stops information, not theft: Snatch and Magnet still work through fog." },
-  bait:{ name:"Bait & Switch", icon:"🪤", blurb:"SET A TRAP: Choose one of your fish cards. On their next turn they are FORCED to ask you for that card's exact mate first — a card you know isn't in your hand the way they need it — so their turn is wasted on a rigged ask and a Go Fish draw. Their turn, spent on your terms." },
-  lucky:{ name:"Lucky Lure", icon:"🍀", blurb:"DRAW 3, KEEP 1 YOU CHOOSE: Haul 3 cards off the pond, look at all 3, tap the 1 you want to keep, and toss the other 2 back into the pond. A real choice — a mate, a modifier, or a fresh fish. Unlike Deep Scope (top 3 fish only, pond info), this is a blind 3-card haul of anything, fish or mod." },
-  mirror:{ name:"Mirror Pond", icon:"🪞", blurb:"COPY THEIR LAST MOVE: The pond's surface mirrors the last modifier THEY played, and you play that same modifier yourself right now — their Snatch becomes your Snatch, their Storm your Storm. Needs a target card if the copied modifier does (tap one of your fish when it asks). Nothing to copy until they've played one." },
-  whirl:{ name:"Whirlpool Spin", icon:"🌪️", blurb:"EXTRA TURN: The whirlpool spins the turn order around — they lose their next turn and YOU act again immediately. The only modifier that gives you another action: play it, then ask (or play another mod) right away. Best when you're one mate away from running the table." },
-  shark:{ name:"Shark Bite", icon:"🦈", blurb:"ONE CARD, GONE FOR GOOD (this turn): A shark snaps one random fish card out of THEIR hand into the pond — they draw NOTHING back and you draw nothing either. Smaller than Storm Surge (1 card, not 2) but with no consolation draw for them: pure tempo loss, best aimed at a hand that's fishing well." },
-  net:{ name:"Net Cast", icon:"🥅", blurb:"FISH GUARANTEED, MODS THROWN BACK: Cast a net and keep drawing until you land a FISH card — every modifier you haul up on the way gets tossed back into the pond, unplayed. The opposite gamble to Lucky Lure: no choice and no mods kept, but you always come up with a fish (if any are left)." },
-  freeze:{ name:"Deep Freeze", icon:"❄️", blurb:"LOCK THEIR MODS: Ice seals their modifier cards for their whole next turn — they can still ask and fish, but they can't play ANY modifier until the turn after. Play it when they're glowing with mods you don't want aimed at you; it blocks nothing that's already been played." },
-  goldie:{ name:"Goldie's Gift", icon:"🐠", blurb:"GOLDIE FETCHES YOUR MATE: Choose one of your fish cards and Goldie dives into the pond and brings back its EXACT mate (same number + same color) if it's in there — instant pair. If the mate isn't in the pond, Goldie tells you where it is: in their hand (ask or Magnet for it) or already banked. A pair, or the truth — never nothing." }
+  snatch:{ name:"Blind Snatch", icon:"🎣", blurb:"Steal 1 random card from your opponent's hand and keep it." },
+  swap:{ name:"Swap Bait", icon:"🪱", blurb:"Swap 1 card from your hand for 1 fresh card from the pond." },
+  peek:{ name:"Peek", icon:"🔭", blurb:"Secretly see up to 3 random cards in your opponent's hand." },
+  double:{ name:"Double Cast", icon:"✌️", blurb:"Draw 2 cards from the pond." },
+  rip:{ name:"Rip Current", icon:"🌀", blurb:"Send 1 random card from your opponent's hand to the pond, then draw 1 card." },
+  sonar:{ name:"Sonar Ping", icon:"📡", blurb:"Pick 1 of your cards and learn if your opponent holds its exact mate." },
+  magnet:{ name:"Magnet Hook", icon:"🧲", blurb:"Pick 1 of your cards and steal its exact mate from your opponent if they have it." },
+  monster:{ name:"Pond Monster", icon:"🐉", blurb:"The monster eats 1 random card from your hand, then you draw 2 cards." },
+  chum:{ name:"Chum Bucket", icon:"🪣", blurb:"Draw 3 cards from the pond, but your opponent draws 1 too." },
+  anchor:{ name:"Anchor", icon:"⚓", blurb:"Block the next Blind Snatch, Rip Current, or Magnet Hook aimed at you." },
+  trade:{ name:"Fair Trade", icon:"🤝", blurb:"Blindly swap 1 random card with your opponent." },
+  sense:{ name:"Mate Sense", icon:"🎯", blurb:"Learn which of your cards have their exact mate in your opponent's hand." },
+  shield:{ name:"Life Ring", icon:"🛡️", blurb:"Block the next Blind Snatch, Rip Current, or Storm Surge aimed at you." },
+  scope:{ name:"Deep Scope", icon:"🔍", blurb:"Look at the pond's top 3 fish cards and keep the best one." },
+  storm:{ name:"Storm Surge", icon:"⚡", blurb:"Send 2 random cards from your opponent's hand to the pond, and they draw 1 back." },
+  reel:{ name:"Reel In", icon:"🪝", blurb:"Steal 1 whole pair from your opponent's pair pile." },
+  fog:{ name:"Fog Bank", icon:"🌫️", blurb:"Hide your hand next turn so your opponent can't Peek, Sonar Ping, or Mate Sense you." },
+  bait:{ name:"Bait & Switch", icon:"🪤", blurb:"Force your opponent to ask you for a card you choose." },
+  lucky:{ name:"Lucky Lure", icon:"🍀", blurb:"Draw 3 cards, keep 1 you choose, and return the other 2 to the pond." },
+  mirror:{ name:"Mirror Pond", icon:"🪞", blurb:"Copy the last modifier your opponent played." },
+  whirl:{ name:"Whirlpool Spin", icon:"🌪️", blurb:"Skip your opponent's next turn and take another turn yourself." },
+  shark:{ name:"Shark Bite", icon:"🦈", blurb:"Send 1 random card from your opponent's hand to the pond with no draw back." },
+  net:{ name:"Net Cast", icon:"🥅", blurb:"Keep drawing until you get a fish card, tossing any modifiers back." },
+  freeze:{ name:"Deep Freeze", icon:"❄️", blurb:"Stop your opponent from playing any modifier on their next turn." },
+  goldie:{ name:"Goldie's Gift", icon:"🐠", blurb:"Pick 1 of your cards and Goldie fetches its exact mate from the pond if it's there." }
 };
 var MODIFIER_ART = {
   snatch:{ bg:"linear-gradient(160deg,#3b2d5c,#6d4fa1)", edge:"#2a1f45", ink:"#f3edff" },
@@ -1913,13 +1914,13 @@ function renderModPanel(v){
   var blurb=inf.blurb;
   if(selectedMod==="mirror"){
     var copied=v.oppLastMod ? MODIFIER_INFO[v.oppLastMod] : null;
-    blurb += copied ? (" Right now it copies: "+copied.icon+" "+copied.name+".") : " They haven't played a modifier yet — there's nothing to copy, so it can't be played.";
+    blurb = copied ? ("Copy your opponent's last modifier — right now that's "+copied.icon+" "+copied.name+".") : "Copy your opponent's last modifier once they've played one.";
     needs = copied ? MOD_NEEDS_TARGET[v.oppLastMod] : (v.you.hand.length ? "card" : null);
   }
   var canPlay = v.yourTurn && v.phase==="playing" && !v.modUsedThisTurn && !v.you.frozen && !busy && !thinking && !(selectedMod==="mirror" && !v.oppLastMod);
   els.modPanel.style.display="flex";
   els.modPanel.style.background=art.bg; els.modPanel.style.color=art.ink;
-  els.modPanel.innerHTML = '<div class="mod-body">'+"<h3>"+inf.icon+" "+esc(inf.name)+'</h3><p>'+esc(blurb)+"</p><p style='font-size:12.5px;opacity:.85;margin:-4px 0 10px'>Playing a modifier uses your whole turn — you don't ask after it. You can hold at most 3 mods.</p></div>"
+  els.modPanel.innerHTML = '<div class="mod-body">'+"<h3>"+inf.icon+" "+esc(inf.name)+'</h3><p>'+esc(blurb)+"</p></div>"
     + '<div class="row">'
     + (canPlay
         ? '<button class="btn btn-play" id="modPlayBtn">'+(needs ? "Arm it — then tap a fish card" : "Play "+esc(inf.name))+"</button>"

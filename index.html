@@ -2411,6 +2411,7 @@ var SceneFX = (function(){
   var flights=[], ringsFx=[], fogFx=[];
   var confetti=null, confettiData=[], confettiT=9;
   var sharkFin=null, sharkT=9, stormT=0, endFired=false;
+  var fxProps=[], boltMesh=null, boltT=9;
   var boatGroup=null, prop=null;
   var backTex=null;
 
@@ -2761,6 +2762,159 @@ var SceneFX = (function(){
       m.position.copy(a.position).add(new THREE.Vector3((rnd(i*13)-0.5)*2.6, 1.2+rnd(i*17)*1.6, (rnd(i*19)-0.5)*1.6));
       m.scale.y=0.6; scene.add(m);
       fogFx.push({ mesh:m, t:-i*0.12, dur:2.4 });
+    }
+  }
+
+  /* ---------------- distinct modifier FX props ----------------
+     One-shot meshes animated per-frame by tick(). Every modifier kind
+     gets its OWN scene moment (see the MOD FX MAP in trigger()). */
+  function spawnProp(mesh,dur,fn){
+    if(!mesh) return;
+    mesh.visible=true; scene.add(mesh);
+    fxProps.push({ mesh:mesh, t:0, dur:dur||1.6, fn:fn });
+  }
+  function pileSpot(a){
+    var dir = (a===anglers.pier) ? -1 : 1;
+    return a.position.clone().add(new THREE.Vector3(3.1*dir, 1.15, a.position.z>0 ? 0.9 : -0.9));
+  }
+  function pairFlight(a,delay){
+    var spot=pileSpot(a), hp=handPos(a);
+    [0,0.16].forEach(function(d,i){
+      flyCard({ from:hp, to:spot, tex:backTex, dur:0.8, delay:(delay||0)+d, arc:1.5, spin:true,
+        onArrive: i===1 ? function(){ doBurst(spot.clone(),0xffd98a); } : null });
+    });
+  }
+  function pulseTravel(from,to,color,n,gap){
+    for(var i=0;i<(n||1);i++){
+      (function(ii){
+        later(ii*(gap||0.22), function(){
+          var s=new THREE.Mesh(new THREE.SphereGeometry(0.14,8,6), new THREE.MeshBasicMaterial({ color:color, transparent:true, opacity:0.95 }));
+          s.position.copy(from);
+          spawnProp(s,0.85,function(k,m){
+            m.position.lerpVectors(from,to,k);
+            m.position.y+=Math.sin(k*Math.PI)*1.5;
+            m.material.opacity=0.95*(1-k*0.35);
+            if(k>0.97) doBurst(to.clone(),color);
+          });
+        });
+      })(i);
+    }
+  }
+  function ringShrink(at,color){
+    var m=new THREE.Mesh(new THREE.RingGeometry(0.46,0.56,36), new THREE.MeshBasicMaterial({ color:color||0xffffff, transparent:true, opacity:0.85, side:THREE.DoubleSide, depthWrite:false }));
+    m.rotation.x=-Math.PI/2; m.position.copy(at); m.position.y=Math.max(at.y,0.06);
+    spawnProp(m,0.7,function(k,mm){ var s=3.4-(3.4-0.7)*k; mm.scale.setScalar(Math.max(s,0.7)); mm.material.opacity=0.85*(1-k); });
+  }
+  function makeMagnetHook(){
+    var g=new THREE.Group();
+    put(g, cyl(0.03,0.03,0.7,0xdddddd,{roughness:0.35,metalness:0.6}), 0,0.4,0);
+    put(g, box(0.36,0.26,0.13,0xc23b4e,{roughness:0.45}), 0,0,0);
+    put(g, box(0.11,0.2,0.14,0xf2f2f2,{roughness:0.4}), -0.125,-0.2,0);
+    put(g, box(0.11,0.2,0.14,0xf2f2f2,{roughness:0.4}), 0.125,-0.2,0);
+    put(g, box(0.36,0.08,0.14,0x8e2436,{roughness:0.45}), 0,0.15,0);
+    return g;
+  }
+  function makeNetProp(){
+    var g=new THREE.Group();
+    var rim=new THREE.Mesh(new THREE.TorusGeometry(1.15,0.055,8,26), mat(0xb8933a,{roughness:0.6})); g.add(rim);
+    for(var i=0;i<4;i++){ var bar=box(2.24,0.035,0.035,0xe8dcc0,{roughness:0.7}); bar.rotation.z=i*Math.PI/4; bar.castShadow=false; g.add(bar); }
+    var inner=new THREE.Mesh(new THREE.TorusGeometry(0.58,0.03,6,18), mat(0xe8dcc0,{roughness:0.7})); g.add(inner);
+    var handle=put(g, cyl(0.05,0.05,1.15,0x8a5a2a,{roughness:0.8}), 1.62,-0.5,0); handle.rotation.z=0.72;
+    return g;
+  }
+  function makeAnchorProp(){
+    var g=new THREE.Group(); var steel=mat(0x5d7d99,{roughness:0.4,metalness:0.55});
+    put(g, cyl(0.07,0.07,1.0,steel), 0,0,0);
+    var cross=put(g, cyl(0.05,0.05,0.56,steel), 0,0.4,0); cross.rotation.z=Math.PI/2;
+    var f1=put(g, box(0.36,0.13,0.13,steel), -0.3,-0.48,0); f1.rotation.z=0.6;
+    var f2=put(g, box(0.36,0.13,0.13,steel), 0.3,-0.48,0); f2.rotation.z=-0.6;
+    var ring=new THREE.Mesh(new THREE.TorusGeometry(0.14,0.04,6,12), steel); ring.position.y=0.62; g.add(ring);
+    return g;
+  }
+  function makeLifeRing(){
+    var g=new THREE.Group();
+    var tor=new THREE.Mesh(new THREE.TorusGeometry(0.55,0.17,10,22), mat(0xf4f4f4,{roughness:0.5})); tor.castShadow=true; g.add(tor);
+    for(var i=0;i<4;i++){ var seg=box(0.3,0.4,0.37,0xd23b3b,{roughness:0.5}); var a=i*Math.PI/2+0.4; seg.position.set(Math.cos(a)*0.55,Math.sin(a)*0.55,0); seg.rotation.z=a+Math.PI/2; g.add(seg); }
+    return g;
+  }
+  function makeScopeProp(){
+    var g=new THREE.Group();
+    var rim=new THREE.Mesh(new THREE.TorusGeometry(0.44,0.065,8,22), mat(0x76a12f,{roughness:0.35,metalness:0.3})); g.add(rim);
+    var glass=new THREE.Mesh(new THREE.CircleGeometry(0.42,22), new THREE.MeshBasicMaterial({ color:0xbfefff, transparent:true, opacity:0.35, side:THREE.DoubleSide })); g.add(glass);
+    var handle=put(g, cyl(0.05,0.05,0.62,0x8a5a2a,{roughness:0.8}), 0.32,-0.58,0); handle.rotation.z=0.6;
+    return g;
+  }
+  function makeTrapProp(){
+    var g=new THREE.Group(); var cage=mat(0xb06a28,{roughness:0.6});
+    put(g, box(0.72,0.1,0.72,cage), 0,-0.26,0);
+    put(g, box(0.72,0.1,0.72,cage), 0,0.26,0);
+    [-0.31,0.31].forEach(function(x){ [-0.31,0.31].forEach(function(z){ put(g, box(0.07,0.52,0.07,cage), x,0,z); }); });
+    put(g, box(0.22,0.17,0.22,0xf5a524,{roughness:0.55}), 0,0,0);
+    return g;
+  }
+  function makeMirrorProp(){
+    var g=new THREE.Group();
+    var frame=new THREE.Mesh(new THREE.TorusGeometry(0.62,0.07,8,24), mat(0x2fa3b8,{roughness:0.3,metalness:0.5})); frame.scale.y=1.3; g.add(frame);
+    var glass=new THREE.Mesh(new THREE.CircleGeometry(0.6,24), new THREE.MeshBasicMaterial({ color:0xdff7ff, transparent:true, opacity:0.55, side:THREE.DoubleSide })); glass.scale.y=1.3; g.add(glass);
+    put(g, cyl(0.05,0.05,0.5,0x155263,{roughness:0.5}), 0,-0.95,0);
+    return g;
+  }
+  function mirrorFx(a){
+    var m=makeMirrorProp();
+    var base=a.position.clone().add(new THREE.Vector3(0,2.5, a.position.z>0 ? -1.5 : 1.5));
+    m.position.copy(base); m.lookAt(0,2.3,0);
+    spawnProp(m,1.5,function(k,mm){
+      mm.position.copy(base); mm.position.y=base.y+Math.sin(k*Math.PI)*0.3;
+      var s=1+Math.sin(k*Math.PI*3)*0.06; mm.scale.set(s,s,1);
+    });
+    spawnRing(handPos(a).clone().setY(0.06),0x9be8f5,3.6);
+    later(0.3,function(){ spawnRing(handPos(a).clone().setY(0.06),0xdff7ff,2.6); });
+  }
+  function makeBolt(){
+    var g=new THREE.Group(); var bm=new THREE.MeshBasicMaterial({ color:0xfff6b0, transparent:true, opacity:0.95 });
+    var pts=[[0,0],[0.38,-1.15],[-0.14,-2.1],[0.3,-3.3]];
+    for(var i=0;i<3;i++){
+      var dx=pts[i+1][0]-pts[i][0], dy=pts[i+1][1]-pts[i][1], len=Math.sqrt(dx*dx+dy*dy);
+      var seg=new THREE.Mesh(new THREE.BoxGeometry(0.17,len+0.15,0.17), bm);
+      seg.position.set((pts[i][0]+pts[i+1][0])/2,(pts[i][1]+pts[i+1][1])/2,0);
+      seg.rotation.z=Math.atan2(dx,-dy);
+      g.add(seg);
+    }
+    g.visible=false; return g;
+  }
+  function iceSpread(targetPos){
+    var g=new THREE.Group();
+    var disc=new THREE.Mesh(new THREE.CircleGeometry(1.6,26), new THREE.MeshBasicMaterial({ color:0xcfeeff, transparent:true, opacity:0.5, depthWrite:false }));
+    disc.rotation.x=-Math.PI/2; g.add(disc);
+    for(var i=0;i<9;i++){
+      var cr=new THREE.Mesh(new THREE.ConeGeometry(0.16+rnd(i*7)*0.12, 0.55+rnd(i*11)*0.5, 6), mat(0xe8f7ff,{roughness:0.25,metalness:0.1}));
+      var aa=rnd(i*13)*Math.PI*2, rr=0.5+rnd(i*17)*1.25;
+      cr.position.set(Math.cos(aa)*rr, 0.22, Math.sin(aa)*rr); cr.rotation.z=(rnd(i*19)-0.5)*0.35; cr.scale.setScalar(0.01);
+      g.add(cr);
+    }
+    g.position.set(targetPos.x, 0.05, targetPos.z);
+    spawnProp(g,2.3,function(k,m){
+      var grow=easeOut(Math.min(k*1.6,1));
+      m.children[0].scale.setScalar(0.4+grow*1.7);
+      m.children[0].material.opacity=0.5*(1-k*0.6);
+      for(var ci=1;ci<m.children.length;ci++){
+        var ck=Math.max(0, Math.min((k*1.7-(ci-1)*0.07),1));
+        m.children[ci].scale.setScalar(Math.max(ck,0.01));
+      }
+      m.rotation.y=k*0.4;
+    });
+    spawnRing(new THREE.Vector3(targetPos.x,0.06,targetPos.z),0xbfefff,3.4);
+  }
+  function chumScatter(){
+    for(var i=0;i<7;i++){
+      (function(ii){
+        later(ii*0.09, function(){
+          var s=new THREE.Mesh(new THREE.SphereGeometry(0.09+rnd(ii*3)*0.06,6,5), mat(ii%2?0xcf6a3a:0x8a5a2a,{roughness:0.7}));
+          var sx=(rnd(ii*23)-0.5)*2.4, sz=(rnd(ii*29)-0.5)*2.4;
+          s.position.set(sx,2.6,sz);
+          spawnProp(s,0.55,function(k,m){ m.position.y=2.6-k*k*2.45; if(k>0.92) doSplashAt(sx,sz,false); });
+        });
+      })(i);
     }
   }
 
@@ -3123,6 +3277,28 @@ var SceneFX = (function(){
     sharkFin=new THREE.Group();
     var finM=new THREE.Mesh(new THREE.ConeGeometry(0.34,0.62,5), mat(0x5d7d99,{roughness:0.5})); finM.scale.z=0.28; finM.position.y=0.22; sharkFin.add(finM);
     sharkFin.visible=false; scene.add(sharkFin);
+    boltMesh=makeBolt(); scene.add(boltMesh);
+    /* ----- extra pond life: a sunning turtle on a log, a heron in the shallows ----- */
+    var logGrp=new THREE.Group();
+    var logM=put(logGrp, cyl(0.32,0.36,3.4,0x7a5230,{roughness:1}), 0,0.05,0); logM.rotation.z=Math.PI/2;
+    put(logGrp, cyl(0.3,0.3,0.06,0xc9a06a,{roughness:1}), -1.72,0.05,0).rotation.z=Math.PI/2;
+    put(logGrp, cyl(0.34,0.34,0.06,0xc9a06a,{roughness:1}), 1.72,0.05,0).rotation.z=Math.PI/2;
+    var turtle=new THREE.Group();
+    var shell=new THREE.Mesh(new THREE.SphereGeometry(0.34,10,8), mat(0x4a7a3a,{roughness:0.7})); shell.scale.set(1.15,0.55,0.95); shell.castShadow=true; turtle.add(shell);
+    put(turtle, new THREE.Mesh(new THREE.SphereGeometry(0.13,8,6), mat(0x6a9a4e,{roughness:0.7})), 0.42,0.05,0);
+    [[-0.25,0.25],[0.25,0.25],[-0.25,-0.25],[0.25,-0.25]].forEach(function(pp){ put(turtle, box(0.16,0.07,0.12,0x6a9a4e,{roughness:0.7}), pp[0],-0.1,pp[1]); });
+    turtle.position.set(-0.5,0.42,0); turtle.rotation.y=0.5; logGrp.add(turtle);
+    logGrp.position.set(-11.5,0.1,4.5); logGrp.rotation.y=0.7; scene.add(logGrp);
+    var heron=new THREE.Group(); var hGrey=mat(0xb9c4cc,{roughness:0.7}), hWhite=mat(0xf2f5f6,{roughness:0.7});
+    var hBody=new THREE.Mesh(new THREE.SphereGeometry(0.34,10,8), hGrey); hBody.scale.set(1.25,0.85,0.8); hBody.position.y=1.05; hBody.castShadow=true; heron.add(hBody);
+    put(heron, cyl(0.035,0.045,0.62,hWhite), 0.42,1.42,0).rotation.z=-0.5;
+    put(heron, new THREE.Mesh(new THREE.SphereGeometry(0.15,8,6), hWhite), 0.6,1.78,0);
+    var beak=put(heron, new THREE.Mesh(new THREE.ConeGeometry(0.05,0.42,6), mat(0xf5a524,{roughness:0.5})), 0.88,1.76,0); beak.rotation.z=-Math.PI/2;
+    put(heron, new THREE.Mesh(new THREE.SphereGeometry(0.045,6,5), mat(0x111111)), 0.64,1.84,0.09);
+    put(heron, new THREE.Mesh(new THREE.SphereGeometry(0.045,6,5), mat(0x111111)), 0.64,1.84,-0.09);
+    [-0.12,0.12].forEach(function(z){ put(heron, cyl(0.025,0.025,0.95,0x3a3f45,{roughness:0.8}), -0.05,0.48,z); });
+    var hWing=put(heron, box(0.62,0.09,0.4,0x9fb0ba,{roughness:0.7}), -0.08,1.12,0.3); hWing.rotation.x=0.25;
+    heron.position.set(10.8,0,-6.5); heron.rotation.y=-0.9; scene.add(heron);
     function makePoints(n,color,size){
       var geo=new THREE.BufferGeometry();
       geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n*3),3));
@@ -3275,7 +3451,7 @@ var SceneFX = (function(){
     pts.geometry.attributes.position.needsUpdate=true;
     return tt+dt;
   }
-  var whirlAngle=0, goldieAngle=0, goldieR=6.4, stormSplashAt=0;
+  var whirlAngle=0, goldieAngle=0, goldieR=6.4, stormSplashAt=0, goldieWakeAt=0;
   function tick(){
     requestAnimationFrame(tick);
     if(!renderer || failed) return;
@@ -3404,6 +3580,23 @@ var SceneFX = (function(){
       if(rk2>=1){ scene.remove(rf.mesh); ringsFx.splice(rfi,1); }
       else { var rs=0.6+(rf.maxR-0.6)*easeOut(rk2); rf.mesh.scale.setScalar(rs); rf.mesh.material.opacity=0.75*(1-rk2); }
     }
+    // one-shot FX props (magnet hook, net, anchor, life ring, scope, trap, mirror, ice…)
+    for(var fpi=fxProps.length-1;fpi>=0;fpi--){
+      var fx=fxProps[fpi]; fx.t+=dt; var fk9=fx.t/fx.dur;
+      if(fk9>=1){ try{ fx.fn(1,fx.mesh); }catch(e){} scene.remove(fx.mesh); fxProps.splice(fpi,1); }
+      else { try{ fx.fn(fk9,fx.mesh); }catch(e){} }
+    }
+    // Deep Freeze ice is a prop (see iceSpread) — lightning for Storm Surge:
+    if(boltMesh){
+      if(boltT<1.6){
+        boltT+=dt;
+        var strike=(boltT<0.14)||(boltT>0.55&&boltT<0.74);
+        if(boltT<0.02||(boltT>0.53&&boltT<0.55)) boltMesh.position.set((rnd(Math.floor(boltT*100)*3+7)-0.5)*8, 6.6, (rnd(Math.floor(boltT*100)*5+11)-0.5)*8);
+        boltMesh.visible=strike;
+      } else boltMesh.visible=false;
+    }
+    // Goldie leaves a little golden wake while dashing in for Goldie's Gift
+    if(goldie && goldieDash>0 && t>goldieWakeAt){ goldieWakeAt=t+0.26; spawnRing(goldie.position.clone().setY(0.06),0xffc98a,1.7); }
     // fog puffs
     for(var ffi=fogFx.length-1;ffi>=0;ffi--){
       var fg=fogFx[ffi]; fg.t+=dt;
@@ -3472,7 +3665,37 @@ var SceneFX = (function(){
   }
 
   /* ---------------- event -> animation mapping ----------------
-     If the yellow banner says it happened, the scene shows it. */
+     If the yellow banner says it happened, the scene shows it.
+     MOD FX MAP — every one of the 25 modifiers has a DISTINCT scene
+     animation, no two share an effect:
+       snatch  = lasso ring shrinks on the foe's hand + card yoinks out spinning
+       swap    = your card arcs into the whirlpool, fresh card hauls up on the pole
+       peek    = three gold glints flash over the foe's hand, one by one
+       double  = pole casts, then a SECOND card rises right behind the first
+       rip     = foe's card spins down into the whirlpool and is sucked under
+       sonar   = three expanding sonar rings roll out from YOUR side across the pond
+       magnet  = a magnet hook flies over, clamps the exact mate, hauls it back
+       monster = the Pond Monster LEAPS from the whirlpool, jaws snap on your card
+       chum    = chum chunks rain into the pond, splashes everywhere, both draw
+       anchor  = a steel anchor splashes down beside you + slate-blue dome
+       trade   = two cards cross mid-pond, meet with a burst, swap sides spinning
+       sense   = three pink sense-pulses travel your line to the foe's hand
+       shield  = a red-and-white life ring drops over you + green dome
+       scope   = a magnifier hovers over the pond, scanning the top cards
+       storm   = lightning bolts strike + the whole pond churns and splashes
+       reel    = TWO pair cards skim low across the water from the foe's pile
+       fog     = a fog bank ROLLS across the pond and swallows your side
+       bait    = a baited trap splashes down in front of the foe (springs with a pop)
+       lucky   = golden sparkles: three cards rise, two sink back, one flies home
+       mirror  = a rippling mirror rises in front of you, THEN the copied effect plays
+       whirl   = the whirlpool spins up fast, rings ripple out, you go again
+       shark   = a shark fin circles the pond, then lunges — SNAP — card gone
+       net     = a landing net sweeps wide across the pond, then the haul comes up
+       freeze  = ice crystals spread across the water and frost the foe over
+       goldie  = Goldie dashes across the pond leaving a golden wake, fetches the mate
+     Core actions: ask = point + card flight, Go Fish = full cast/haul,
+     pair = two cards fly to the pair-pile corner + burst, game over =
+     confetti on a win, a big sad splash on a loss. */
   function trigger(ev, v){
     if(!inited || failed || !ev) return;
     var A = ev.actor==="you" ? viewerAngler() : otherAngler();
@@ -3483,6 +3706,9 @@ var SceneFX = (function(){
     var frontForYou = ev.actor==="you";
     var drawnTex = ev.drawnCard ? (frontForYou ? frontTexFor(ev.drawnCard.id) : backTex) : backTex;
     function castLater(sec,tex){ later(sec,function(){ startCast(A,{ tex:tex||backTex }); }); }
+    /* Mirror Pond: the event kind is the COPIED modifier's kind, so the
+       mirror itself ripples up first — then the copied effect plays too. */
+    if(ev.text && ev.text.indexOf("Mirror Pond!")===0) mirrorFx(A);
     switch(ev.kind){
       case "start":
         endFired=false;
@@ -3490,13 +3716,38 @@ var SceneFX = (function(){
         spawnRing(center.clone(),0xf5a524,5);
         break;
       case "ask_hit":
-        flyCard({ from:oPos, to:aPos, tex: frontForYou&&ev.mateId ? frontTexFor(ev.mateId) : backTex, dur:0.9, arc:1.7,
-          onArrive:function(){ doBurst(aPos,0xffd98a); } });
-        react(A,"happy",0.9); react(O,"sad",0.8);
+        react(A,"wow",0.5);
+        flyCard({ from:oPos, to:aPos, tex: frontForYou&&ev.mateId ? frontTexFor(ev.mateId) : backTex, dur:0.9, delay:0.18, arc:1.7,
+          onArrive:function(){ doBurst(aPos.clone(),0xffd98a); } });
+        later(0.5,function(){ react(A,"happy",0.9); });
+        react(O,"sad",0.8);
+        if(ev.pairId) pairFlight(A,1.15);
         break;
-      case "ask_miss": case "bait":
+      case "ask_miss":
         react(O,"shake",0.9);
         startCast(A,{ tex:drawnTex });
+        break;
+      case "bait":
+        if(ev.askText){
+          // the trap SPRINGS: it pops out of the water by the asker, then the forced ask plays out
+          var trapS=makeTrapProp(); var trapBase=A.position.clone().add(new THREE.Vector3(0,0.1, A.position.z>0 ? -2.2 : 2.2));
+          spawnProp(trapS,1.1,function(k,m){ m.position.copy(trapBase); m.position.y=trapBase.y+Math.sin(Math.min(k*1.4,1)*Math.PI)*1.15; m.rotation.y=k*2.2; });
+          doSplashAt(trapBase.x,trapBase.z,false);
+          later(0.55,function(){
+            if(ev.drew || ev.drawnCard) startCast(A,{ tex:drawnTex });
+            else flyCard({ from:oPos, to:aPos, tex: frontForYou&&ev.mateId ? frontTexFor(ev.mateId) : backTex, dur:0.9, arc:1.7, onArrive:function(){ doBurst(aPos.clone(),0xffd98a); } });
+          });
+          react(O,"wow",0.8);
+        } else {
+          // setting the trap: a baited cage splashes down in front of the opponent and sinks in
+          var trapD=makeTrapProp(); var trapSpot=O.position.clone().add(new THREE.Vector3(0,0, O.position.z>0 ? -2.4 : 2.4));
+          spawnProp(trapD,1.9,function(k,m){
+            m.position.set(trapSpot.x, k<0.3 ? 2.4-(k/0.3)*2.2 : 0.2-Math.sin(Math.min((k-0.3)/0.7,1)*Math.PI)*0.12, trapSpot.z);
+            m.rotation.y=k*1.4;
+            if(k>0.28 && !m.userData.splashed){ m.userData.splashed=true; doSplashAt(trapSpot.x,trapSpot.z,false); }
+          });
+          react(A,"happy",0.8); react(O,"wow",0.7);
+        }
         break;
       case "fish_wish":
         react(O,"shake",0.9);
@@ -3507,113 +3758,231 @@ var SceneFX = (function(){
         if(ev.drew){
           react(O,"shake",0.9);
           startCast(A,{ tex:drawnTex });
-          later(2.1,function(){ doBurst(aPos,0xffd98a); react(A,"happy",1.3); });
-        } else {
-          flyCard({ from:oPos, to:aPos, tex: frontForYou&&ev.mateId ? frontTexFor(ev.mateId) : backTex, dur:0.85, arc:1.7,
+          later(2.1,function(){ doBurst(aPos.clone(),0xffd98a); react(A,"happy",1.3); pairFlight(A,0.15); });
+        } else if(ev.mateId) {
+          react(A,"wow",0.5);
+          flyCard({ from:oPos, to:aPos, tex: frontForYou ? frontTexFor(ev.mateId) : backTex, dur:0.85, delay:0.15, arc:1.7,
             onArrive:function(){
-              doBurst(aPos,0xffd98a);
-              flyCard({ from:aPos, to:aPos.clone().add(new THREE.Vector3(0,0.4,0)), tex:backTex, dur:0.7, arc:1.3, spin:true, fade:true });
+              doBurst(aPos.clone(),0xffd98a);
+              pairFlight(A,0.1);
             } });
-          react(A,"happy",1.3); react(O,"sad",0.9);
+          later(0.6,function(){ react(A,"happy",1.3); }); react(O,"sad",0.9);
+        } else {
+          // laid down from your own hand: both cards fly straight to your pair-pile corner
+          pairFlight(A,0.05);
+          later(0.7,function(){ react(A,"happy",1.2); });
         }
         break;
       case "monster":
         monsterAnim={ t:0, dur:2.0 }; doSplash(true); whirlBoost=Math.max(whirlBoost,1.6);
-        flyCard({ from:aPos, to:new THREE.Vector3(0,2.5,0.9), tex:backTex, dur:1.0, delay:0.35, arc:1.8, fade:true });
+        // your card is tossed to the whirlpool — the monster leaps out and SNAPS it mid-air
+        flyCard({ from:aPos, to:new THREE.Vector3(0,3.0,1.5), tex:backTex, dur:0.7, delay:0.5, arc:1.6, fade:true });
+        later(1.22,function(){ doBurst(new THREE.Vector3(0,3.1,1.6),0xbfe3b0); doSplash(true); });
         react(A,"wow",1.0);
         castLater(1.5, drawnTex);
         later(2.2,function(){ react(A,"happy",0.9); });
+        if(ev.pairId) pairFlight(A,3.4);
         break;
       case "magnet":
-        spawnRing(oPos.clone().setY(0.06),0xa86fe0,2.2);
-        flyCard({ from:oPos, to:aPos, tex: frontForYou&&ev.drawnCard ? frontTexFor(ev.drawnCard.id) : backTex, dur:0.8, arc:1.3,
-          onArrive:function(){ doBurst(aPos,0xffd98a); } });
-        react(A,"happy",1.0); react(O,"sad",0.9);
+        // the hook flies over, clamps the EXACT mate, and hauls it back across the pond
+        var mgHook=makeMagnetHook(); var mgFrom=aPos.clone(), mgTo=oPos.clone();
+        spawnProp(mgHook,1.55,function(k,m){
+          if(k<0.38){ var u=k/0.38; m.position.lerpVectors(mgFrom,mgTo,u); m.position.y+=Math.sin(u*Math.PI)*1.3; m.rotation.z=Math.sin(u*Math.PI)*0.3; }
+          else if(k<0.56){ m.position.copy(mgTo); m.rotation.z=Math.sin(k*46)*0.22; }
+          else { var u2=(k-0.56)/0.44; m.position.lerpVectors(mgTo,mgFrom,u2); m.position.y+=Math.sin(u2*Math.PI)*1.3; }
+        });
+        flyCard({ from:oPos, to:aPos, tex: frontForYou&&ev.drawnCard ? frontTexFor(ev.drawnCard.id) : backTex, dur:0.68, delay:0.87, arc:1.15,
+          onArrive:function(){ doBurst(aPos.clone(),0xffd98a); } });
+        later(0.4,function(){ react(O,"sad",0.9); });
+        later(1.2,function(){ react(A,"happy",1.0); });
+        if(ev.pairId) pairFlight(A,1.7);
         break;
       case "snatch":
-        flyCard({ from:oPos, to:aPos, tex:backTex, dur:0.85, arc:1.8, spin:true });
+        ringShrink(oPos.clone(),0xf5a524);
+        doBurst(oPos.clone(),0xffffff);
+        flyCard({ from:oPos, to:aPos, tex:backTex, dur:0.7, delay:0.45, arc:1.9, spin:true, onArrive:function(){ doBurst(aPos.clone(),0xffd98a); } });
         react(A,"happy",0.9); react(O,"sad",0.9);
+        if(ev.pairId) pairFlight(A,1.3);
         break;
       case "trade":
-        flyCard({ from:oPos, to:aPos, tex:backTex, dur:0.95, arc:1.9 });
-        flyCard({ from:aPos, to:oPos, tex:backTex, dur:0.95, arc:1.9 });
+        flyCard({ from:oPos, to:aPos, tex:backTex, dur:1.05, arc:1.9, spin:true });
+        flyCard({ from:aPos, to:oPos, tex:backTex, dur:1.05, arc:1.9, spin:true });
+        later(0.52,function(){ doBurst(new THREE.Vector3(0,3.4,0),0xffe9a8); spawnRing(center.clone(),0xf5a524,2.6); });
         react(A,"wow",0.8); react(O,"wow",0.8);
+        if(ev.pairId) pairFlight(A,1.25);
         break;
       case "rip":
-        flyCard({ from:oPos, to:center, tex:backTex, dur:0.8, arc:1.6, fade:true, onArrive:function(){ doSplash(false); } });
-        whirlBoost=Math.max(whirlBoost,1.5);
+        flyCard({ from:oPos, to:center, tex:backTex, dur:0.8, arc:1.4, spin:true, fade:true, onArrive:function(){ doSplash(false); spawnRing(center.clone(),0x74c7ec,3.2); } });
+        whirlBoost=Math.max(whirlBoost,1.9);
         castLater(0.55, drawnTex);
         react(O,"sad",0.9);
+        if(ev.pairId) pairFlight(A,2.9);
         break;
       case "shark":
         sharkT=0;
-        flyCard({ from:oPos, to:center, tex:backTex, dur:0.9, delay:0.5, arc:1.5, fade:true, onArrive:function(){ doSplash(false); } });
+        later(1.5,function(){ doSplash(true); });
+        flyCard({ from:oPos, to:center, tex:backTex, dur:0.55, delay:1.18, arc:1.2, fade:true, onArrive:function(){ doSplash(true); } });
         react(O,"sad",1.0);
         break;
       case "storm":
-        stormT=2.3; whirlBoost=3; doSplash(true);
+        stormT=2.3; boltT=0; whirlBoost=3; doSplash(true);
         later(0.5,function(){ doSplash(true); });
+        later(1.1,function(){ doSplashAt((rnd(31)-0.5)*5,(rnd(47)-0.5)*5,true); });
+        flyCard({ from:oPos, to:center, tex:backTex, dur:0.9, delay:0.35, arc:1.7, spin:true, fade:true });
+        flyCard({ from:oPos, to:center, tex:backTex, dur:0.9, delay:0.6, arc:2.0, spin:true, fade:true });
         react(O,"sad",1.1); react(A,"wow",0.8);
         break;
       case "reel":
-        doBurst(oPos,0xf5a524);
-        flyCard({ from:oPos, to:aPos, tex:backTex, dur:1.0, arc:2.1, onArrive:function(){ doBurst(aPos,0xf5a524); } });
+        // a whole PAIR skims low across the water from their pile to yours, on the line
+        doBurst(pileSpot(O),0xf5a524);
+        flyCard({ from:pileSpot(O), to:pileSpot(A), tex:backTex, dur:1.05, arc:0.55, onArrive:function(){ doBurst(pileSpot(A),0xf5a524); } });
+        flyCard({ from:pileSpot(O), to:pileSpot(A), tex:backTex, dur:1.05, delay:0.18, arc:0.7, spin:true });
+        spawnRing(center.clone(),0xf5a524,2.2);
         react(A,"happy",1.1); react(O,"sad",1.0);
         break;
       case "goldie":
         goldieDash=2.6;
+        doSplashAt(2.5,2.5,false);
         later(0.75,function(){
           flyCard({ from:center.clone().add(new THREE.Vector3(0,0.5,0)), to:aPos, tex:drawnTex, dur:0.95, arc:1.6,
-            onArrive:function(){ doBurst(aPos,0xffd98a); } });
+            onArrive:function(){ doBurst(aPos.clone(),0xffd98a); } });
         });
         react(A,"happy",1.1);
+        if(ev.pairId) pairFlight(A,1.9);
         break;
       case "whirl":
-        whirlBoost=2.8; spawnRing(center.clone(),0x74c7ec,5.5);
-        later(0.3,function(){ spawnRing(center.clone(),0xffffff,4); });
-        react(A,"happy",1.0);
+        whirlBoost=3.4; spawnRing(center.clone(),0x74c7ec,5.5);
+        later(0.3,function(){ spawnRing(center.clone(),0xffffff,4.2); });
+        later(0.6,function(){ spawnRing(center.clone(),0x74c7ec,3.2); });
+        spawnRing(aPos.clone().setY(0.06),0xf5a524,2.8);
+        doSplash(false);
+        react(A,"happy",1.0); react(O,"sad",0.7);
         break;
       case "double":
         startCast(A,{ tex:drawnTex });
-        later(1.7,function(){ flyCard({ from:center, to:aPos, tex:backTex, dur:0.9, arc:1.8 }); });
+        later(1.55,function(){ flyCard({ from:center.clone().add(new THREE.Vector3(0,0.3,0)), to:aPos, tex:backTex, dur:0.95, mode:"rise" }); doBurst(center.clone().add(new THREE.Vector3(0,1.4,0)),0x9be8f5); });
+        if(ev.pairId) pairFlight(A,2.8);
         break;
       case "chum":
-        startCast(A,{ tex:drawnTex });
-        later(1.6,function(){ flyCard({ from:center, to:aPos, tex:backTex, dur:0.9, arc:1.8 }); });
-        later(1.85,function(){ flyCard({ from:center, to:oPos, tex:backTex, dur:0.9, arc:1.8 }); });
+        chumScatter();
+        later(0.65,function(){ startCast(A,{ tex:drawnTex }); });
+        later(2.2,function(){ flyCard({ from:center, to:aPos, tex:backTex, dur:0.9, arc:1.8 }); });
+        later(2.45,function(){ flyCard({ from:center, to:oPos, tex:backTex, dur:0.9, arc:1.8 }); react(O,"happy",0.8); });
+        react(A,"wow",0.9);
+        if(ev.pairId) pairFlight(A,3.3);
         break;
       case "net":
-        spawnRing(center.clone(),0xffffff,4.5); doSplash(true);
-        castLater(0.4, drawnTex);
+        var netM=makeNetProp();
+        spawnProp(netM,1.5,function(k,m){
+          m.position.set(-4.6+k*9.2, 1.35+Math.sin(k*Math.PI)*0.5, Math.sin(k*Math.PI*2)*0.8);
+          m.rotation.set(-1.05, 0, -0.5+k*1.0);
+          if(k>0.9 && !m.userData.splashed){ m.userData.splashed=true; doSplash(true); }
+        });
+        spawnRing(center.clone(),0xffffff,4.5);
+        castLater(0.85, drawnTex);
+        react(A,"wow",0.8);
+        if(ev.pairId) pairFlight(A,3.2);
         break;
-      case "lucky": case "scope":
-        startCast(A,{ tex:drawnTex });
-        if(ev.kind==="scope") spawnRing(center.clone(),0xa86fe0,4);
+      case "lucky":
+        doBurst(center.clone().add(new THREE.Vector3(0,1.6,0)),0xf5c542);
+        spawnRing(center.clone(),0xf5a524,3.6);
+        flyCard({ from:center.clone().add(new THREE.Vector3(-0.7,0.3,0)), to:center.clone().add(new THREE.Vector3(-0.7,2.0,0)), tex:backTex, dur:0.8, mode:"rise", fade:true });
+        flyCard({ from:center.clone().add(new THREE.Vector3(0.7,0.3,0)), to:center.clone().add(new THREE.Vector3(0.7,2.0,0)), tex:backTex, dur:0.8, delay:0.18, mode:"rise", fade:true });
+        startCast(A,{ tex:drawnTex, delay:0.25 });
+        react(A,"wow",0.9);
+        if(ev.pairId) pairFlight(A,2.9);
+        break;
+      case "scope":
+        var scopeM=makeScopeProp();
+        spawnProp(scopeM,1.9,function(k,m){
+          m.position.set(Math.sin(k*Math.PI*2.2)*1.7, 1.75+Math.sin(k*Math.PI)*0.25, Math.cos(k*Math.PI*1.6)*0.9);
+          m.rotation.set(0.5, k*2.4, 0.15);
+        });
+        spawnRing(center.clone(),0xa8e063,3.8);
+        later(1.15,function(){ flyCard({ from:center.clone().add(new THREE.Vector3(0,0.4,0)), to:aPos, tex:drawnTex, dur:0.9, mode:"rise", onArrive:function(){ doBurst(aPos.clone(),0xd8ffb0); } }); });
+        react(A,"wow",0.9);
+        if(ev.pairId) pairFlight(A,2.2);
         break;
       case "swap":
         flyCard({ from:aPos, to:center, tex:backTex, dur:0.75, arc:1.5, fade:true, onArrive:function(){ doSplash(false); } });
+        var worm=new THREE.Mesh(new THREE.SphereGeometry(0.11,7,6), mat(0xe88aa0,{roughness:0.6})); worm.scale.set(1.7,0.7,0.7);
+        spawnProp(worm,0.75,function(k,m){ m.position.lerpVectors(aPos,center.clone().setY(0.3),k); m.position.y+=Math.sin(k*Math.PI)*1.5; m.rotation.y=k*5; });
         castLater(0.5, drawnTex);
+        if(ev.pairId) pairFlight(A,2.9);
         break;
-      case "peek": case "sonar": case "sense": case "mirror":
-        spawnRing(aPos.clone().setY(0.06),0xa86fe0,3.4);
-        later(0.25,function(){ spawnRing(oPos.clone().setY(0.06),0xa86fe0,2.4); });
+      case "peek":
+        // three gold glints flash over the foe's hand, one by one — you're memorizing them
+        [0,0.32,0.64].forEach(function(d,i){
+          later(d,function(){
+            var gp=oPos.clone().add(new THREE.Vector3((i-1)*0.55,0.25,0));
+            doBurst(gp,0xffd94a); spawnRing(gp.clone().setY(0.06),0xf5a524,1.3);
+          });
+        });
+        react(A,"wow",0.9);
+        break;
+      case "sonar":
+        // expanding sonar rings roll out from YOUR side, across the pond, to the foe
+        [0,0.3,0.6].forEach(function(d,i){
+          later(d,function(){ spawnRing(aPos.clone().setY(0.06),0x4ae3b5,3.2+i*1.7); });
+        });
+        pulseTravel(aPos.clone(),oPos.clone(),0x4ae3b5,1,0);
+        later(0.95,function(){ doBurst(oPos.clone(),0x4ae3b5); });
         react(A,"wow",0.8);
         break;
+      case "sense":
+        // three pink pulses thrum down your line to the foe's hand
+        pulseTravel(aPos.clone(),oPos.clone(),0xff7fb0,3,0.3);
+        spawnRing(aPos.clone().setY(0.06),0xff7fb0,2.2);
+        react(A,"wow",0.8);
+        break;
+      case "mirror":
+        // (mirror copies another mod, so its kind rarely arrives as "mirror" —
+        //  the rippling mirror itself is raised by mirrorFx above the switch)
+        mirrorFx(A);
+        break;
       case "anchor":
+        var anch=makeAnchorProp(); var anchFrom=A.position.clone().add(new THREE.Vector3(0,3.4, A.position.z>0 ? -1.6 : 1.6));
+        var anchTo=A.position.clone().add(new THREE.Vector3(1.8,0.25, A.position.z>0 ? -2.6 : 2.6));
+        spawnProp(anch,1.7,function(k,m){
+          if(k<0.45){ var u=k/0.45; m.position.lerpVectors(anchFrom,anchTo,u*u); m.rotation.z=u*0.5; if(k>0.42 && !m.userData.splashed){ m.userData.splashed=true; doSplashAt(anchTo.x,anchTo.z,false); } }
+          else { m.position.copy(anchTo); m.position.y=0.25-Math.sin(Math.min((k-0.45)/0.55,1)*Math.PI)*0.06; m.rotation.z=0.5+Math.sin(k*9)*0.03; }
+        });
         domeFlash(A,0x7fd4ff,1.8); react(A,"happy",0.8);
         break;
       case "shield":
+        var ringP=makeLifeRing(); var ringTop=A.position.clone().add(new THREE.Vector3(0,5.6,0)); var ringRest=A.position.clone().add(new THREE.Vector3(0,2.75,0));
+        spawnProp(ringP,1.8,function(k,m){
+          if(k<0.5){ var u=k/0.5; m.position.lerpVectors(ringTop,ringRest,u); m.rotation.x=1.15; m.rotation.y=u*1.2; }
+          else { var u2=(k-0.5)/0.5; m.position.copy(ringRest); m.position.y=ringRest.y+Math.abs(Math.sin(u2*Math.PI*2))*0.14*(1-u2); m.rotation.x=1.15+Math.sin(u2*Math.PI*2)*0.08; m.rotation.y=1.2+u2*0.6; }
+        });
         domeFlash(A,0x8affc1,1.8); react(A,"happy",0.8);
         break;
       case "blocked":
         domeFlash(O,0x8affc1,1.6);
+        later(0.15,function(){ doBurst(oPos.clone(),0xffffff); spawnRing(oPos.clone().setY(0.06),0x8affc1,2.4); });
         react(A,"sad",0.9); react(O,"happy",0.8);
         break;
       case "fog":
         fogPuff(A); domeFlash(A,0xffffff,1.6);
+        // and a low fog BANK rolls in off the pond and swallows your whole side
+        for(var fbi=0;fbi<7;fbi++){
+          (function(ii){
+            var fm=new THREE.Mesh(new THREE.SphereGeometry(0.85+rnd(ii*7)*0.55,8,6), new THREE.MeshBasicMaterial({ color:0xeef6f8, transparent:true, opacity:0.34, depthWrite:false }));
+            fm.scale.y=0.55;
+            var fStart=new THREE.Vector3(A.position.x+(rnd(ii*13)-0.5)*3.4, 0.65+rnd(ii*17)*0.7, A.position.z>0 ? 2.5 : -2.5);
+            var fEnd=new THREE.Vector3(A.position.x+(rnd(ii*19)-0.5)*3.0, fStart.y+0.3, A.position.z+(A.position.z>0?-0.6:0.6));
+            fm.position.copy(fStart);
+            spawnProp(fm,2.6,function(k,m){ var fk=Math.max(0,Math.min(k*1.15-ii*0.05,1)); m.position.lerpVectors(fStart,fEnd,fk); m.material.opacity=0.34*(1-k*0.55); m.scale.x=1+k*0.7; m.scale.z=1+k*0.5; });
+          })(fbi);
+        }
+        react(A,"happy",0.7);
         break;
       case "freeze":
-        domeFlash(O,0xbfefff,1.8); react(O,"shake",0.8);
+        // ice crystals spread across the water toward the foe and frost them over
+        iceSpread(O.position.clone().add(new THREE.Vector3(0,0, O.position.z>0 ? -2.8 : 2.8)));
+        iceSpread(center.clone().add(new THREE.Vector3((rnd(53)-0.5)*2,0,(rnd(59)-0.5)*2)));
+        domeFlash(O,0xbfefff,2.0); react(O,"shake",0.9);
+        later(0.5,function(){ doBurst(oPos.clone(),0xe8f7ff); });
         break;
       default:
         if(ev.drew) startCast(A,{ tex:drawnTex });
@@ -3624,9 +3993,16 @@ var SceneFX = (function(){
     if(v && v.phase==="finished" && !endFired){
       endFired=true;
       var V=viewerAngler(), W=otherAngler();
-      if(v.winner==="you"){ confettiT=0; react(V,"celebrate",3.0); react(W,"sad",2.0); }
-      else if(v.winner==="opponent"){ react(V,"slump",3.0); react(W,"celebrate",3.0); }
-      else { react(V,"happy",1.6); react(W,"happy",1.6); }
+      if(v.winner==="you"){ confettiT=0; doBurst(handPos(V),0xffd98a); react(V,"celebrate",3.0); react(W,"sad",2.0); }
+      else if(v.winner==="opponent"){
+        // a loss lands with a big sad splash over your side of the pond
+        react(V,"slump",3.0); react(W,"celebrate",3.0);
+        var vPos=V.position.clone();
+        doSplashAt(vPos.x*0.4, vPos.z>0 ? 2.6 : -2.6, true);
+        later(0.5,function(){ doSplashAt(vPos.x*0.4, vPos.z>0 ? 2.6 : -2.6, false); spawnRing(new THREE.Vector3(0,0.06,0),0x9fb6c4,4.2); });
+        later(0.9,function(){ doBurst(handPos(V),0x9fb6c4); });
+      }
+      else { react(V,"happy",1.6); react(W,"happy",1.6); doSplash(false); }
     }
   }
   return {

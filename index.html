@@ -203,6 +203,7 @@
   .mini-cards{display:inline-flex;gap:4px;flex-wrap:wrap}
   /* ---------- Hand ---------- */
   .hand-panel{
+    position:relative;
     margin-top:10px;background:var(--panel);border:1px solid var(--panel-line);border-radius:var(--radius);
     padding:12px;box-shadow:var(--shadow);
   }
@@ -241,9 +242,14 @@
   @media (prefers-reduced-motion: reduce){ .modcard.useful{animation:none;box-shadow:0 0 0 3px rgba(245,165,36,.9)} }
   @media (min-width:640px){ .pcard,.modcard{width:64px;height:92px} .pcard .mid{font-size:31px} .modcard .ic{font-size:28px} .modcard .nm{font-size:9.5px} }
   /* ---------- Modifier panel ---------- */
+  /* Floats over the banner / scene area directly above the hand —
+     absolutely positioned out of flow, so opening it never pushes
+     the hand cards down or off the first screen. */
   #modPanel{
-    display:none;margin:0 0 10px;border-radius:var(--radius);padding:12px 14px;color:#fff;
-    box-shadow:var(--shadow);border:1px solid rgba(0,0,0,.35);
+    display:none;position:absolute;left:12px;right:12px;bottom:calc(100% + 8px);z-index:40;
+    margin:0;border-radius:var(--radius);padding:12px 14px;color:#fff;
+    box-shadow:0 18px 44px rgba(0,0,0,.5),0 4px 14px rgba(0,0,0,.35);border:1px solid rgba(0,0,0,.35);
+    max-height:min(52vh,360px);overflow-y:auto;
   }
   #modPanel h3{margin:0 0 4px;font-size:18px;font-family:Georgia,serif}
   #modPanel p{margin:0 0 10px;font-size:14px;line-height:1.45;opacity:.94}
@@ -450,7 +456,7 @@
     .modcard{padding:4px 3px}
     .modcard .ic{font-size:20px}
     .modcard .nm{font-size:8px}
-    #modPanel{margin-bottom:8px;padding:9px 11px}
+    #modPanel{left:6px;right:6px;bottom:calc(100% + 6px);margin:0;padding:9px 11px;max-height:54dvh}
     #modPanel h3{font-size:16px;margin-bottom:2px}
     #modPanel p{font-size:12.5px;line-height:1.35;margin-bottom:6px}
     #modPanel .btn{padding:8px 12px;font-size:14px}
@@ -1939,11 +1945,9 @@ function onModTap(m){
   selectedMod = selectedMod===m ? null : m;
   armed=null;
   render();
-  /* The detail card sits inside the hand panel, ABOVE your cards —
-     bring it into view immediately so Play is never a scroll-hunt. */
-  if(selectedMod && els.modPanel){
-    try{ els.modPanel.scrollIntoView({ block:"nearest", behavior:"smooth" }); }catch(e){ els.modPanel.scrollIntoView(); }
-  }
+  /* The detail panel floats over the scene directly above the hand
+     (position:absolute, out of flow), so it is already in view when
+     it opens and the hand never moves — no scrolling needed. */
 }
 function doAsk(card){
   if(mode==="guest"||mode==="host"){ sendToHost({ t:"ask", card:card.id }); return; }

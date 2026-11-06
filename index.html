@@ -2417,31 +2417,62 @@ var SceneFX = (function(){
   var boatGroup=null, prop=null;
   var backTex=null;
   var lilies=[], swayers=[], schoolFish=[], waterDetailTex=null, sheenDetailTex=null, fabricTexCache=null;
+  var waterGeo=null, waterBase=null, hullRipples=[];
 
   function rnd(n){ var x=Math.sin(n*127.1+311.7)*43758.5453; return x-Math.floor(x); }
   function mat(c,o){ return new THREE.MeshStandardMaterial(Object.assign({ color:c, roughness:0.8, metalness:0.04 }, o||{})); }
   function box(w,h,d,c,o){ var m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), (c&&c.isMaterial)?c:mat(c,o)); m.castShadow=true; return m; }
   function cyl(rt,rb,h,c,o,seg){ var m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg||10), (c&&c.isMaterial)?c:mat(c,o)); m.castShadow=true; return m; }
   function put(parent,mesh,x,y,z){ mesh.position.set(x||0,y||0,z||0); parent.add(mesh); return mesh; }
+  /* One gentle swell function for the whole pond: the water surface
+     vertices, the lily pads, the debris, Goldie and the boat all sample
+     THIS, so everything rides the same waves and nothing clips through
+     anything else. Max amplitude ≈ 0.046 — everything that floats sits
+     above that. */
+  function waveH(x,z,t){
+    return Math.sin(x*0.5+t*1.25)*0.018 + Math.sin(z*0.62-t*1.0)*0.016 + Math.sin((x+z)*0.3+t*0.66)*0.012;
+  }
 
   /* ---------------- textures ---------------- */
   function woodTexture(){
     var cv=document.createElement("canvas"); cv.width=256; cv.height=256;
     var g=cv.getContext("2d");
     g.fillStyle="#a97a45"; g.fillRect(0,0,256,256);
-    for(var i=0;i<30;i++){
-      var y=rnd(i*3+1)*256; g.strokeStyle="rgba(96,58,22,"+(0.10+rnd(i)*0.14)+")"; g.lineWidth=1+rnd(i*7)*2.2;
+    // plank bands: four boards per tile, each with its own tone shift and a
+    // dark seam, so any surface tiled with this reads as joined planks
+    for(var pb=0;pb<4;pb++){
+      g.fillStyle="rgba("+(pb%2?"255,230,180":"60,35,10")+","+(0.05+rnd(pb*7)*0.05)+")";
+      g.fillRect(0,pb*64,256,64);
+      g.fillStyle="rgba(43,26,8,.55)"; g.fillRect(0,pb*64,256,2.5);
+      g.fillStyle="rgba(255,240,200,.20)"; g.fillRect(0,pb*64+2.5,256,2);
+    }
+    for(var i=0;i<64;i++){
+      var y=rnd(i*3+1)*256; g.strokeStyle="rgba(96,58,22,"+(0.08+rnd(i)*0.16)+")"; g.lineWidth=0.8+rnd(i*7)*2.2;
       g.beginPath(); g.moveTo(0,y);
       g.bezierCurveTo(80,y+ (rnd(i*11)-0.5)*10, 170,y+(rnd(i*13)-0.5)*10, 256,y+(rnd(i*17)-0.5)*8); g.stroke();
     }
-    for(var k=0;k<4;k++){
-      var kx=40+rnd(k*23)*180, ky=40+rnd(k*29)*180;
-      g.strokeStyle="rgba(80,48,18,.4)"; g.lineWidth=2;
-      g.beginPath(); g.ellipse(kx,ky,7+rnd(k)*5,4+rnd(k*3)*3,0.4,0,Math.PI*2); g.stroke();
-      g.fillStyle="rgba(80,48,18,.35)"; g.beginPath(); g.ellipse(kx,ky,2.4,1.6,0.4,0,Math.PI*2); g.fill();
+    for(var wv=0;wv<22;wv++){ // pale weathered streaks running with the grain
+      var wy=rnd(wv*19+3)*256; g.strokeStyle="rgba(255,238,205,"+(0.05+rnd(wv*23)*0.08)+")"; g.lineWidth=1+rnd(wv*29)*1.6;
+      g.beginPath(); g.moveTo(rnd(wv*31)*120,wy); g.lineTo(140+rnd(wv*37)*116, wy+(rnd(wv*41)-0.5)*6); g.stroke();
     }
-    g.fillStyle="rgba(40,26,10,.75)";
-    [[14,14],[242,14],[14,242],[242,242]].forEach(function(p){ g.beginPath(); g.arc(p[0],p[1],4.5,0,Math.PI*2); g.fill(); });
+    for(var k=0;k<7;k++){
+      var kx=30+rnd(k*23)*200, ky=30+rnd(k*29)*200;
+      g.strokeStyle="rgba(80,48,18,.45)"; g.lineWidth=2;
+      g.beginPath(); g.ellipse(kx,ky,7+rnd(k)*5,4+rnd(k*3)*3,0.4,0,Math.PI*2); g.stroke();
+      g.beginPath(); g.ellipse(kx,ky,11+rnd(k)*4,6+rnd(k*3)*3,0.4,0,Math.PI*2); g.stroke();
+      g.fillStyle="rgba(80,48,18,.4)"; g.beginPath(); g.ellipse(kx,ky,2.4,1.6,0.4,0,Math.PI*2); g.fill();
+    }
+    // nail heads: two per plank seam, dark centre + a warm highlight dot
+    g.fillStyle="rgba(40,26,10,.8)";
+    for(var nb=0;nb<4;nb++){ [18,238].forEach(function(nx){
+      g.beginPath(); g.arc(nx,nb*64+12,4.2,0,Math.PI*2); g.fill();
+      g.beginPath(); g.arc(nx,nb*64+52,4.2,0,Math.PI*2); g.fill();
+    }); }
+    g.fillStyle="rgba(255,240,200,.4)";
+    for(var nb2=0;nb2<4;nb2++){ [18,238].forEach(function(nx){
+      g.beginPath(); g.arc(nx-1.2,nb2*64+10.8,1.4,0,Math.PI*2); g.fill();
+      g.beginPath(); g.arc(nx-1.2,nb2*64+50.8,1.4,0,Math.PI*2); g.fill();
+    }); }
     g.fillStyle="rgba(255,240,200,.25)"; g.fillRect(0,0,256,10);
     g.fillStyle="rgba(60,35,10,.35)"; g.fillRect(0,246,256,10);
     var tx=new THREE.CanvasTexture(cv); if("colorSpace" in tx && THREE.SRGBColorSpace) tx.colorSpace=THREE.SRGBColorSpace;
@@ -2583,14 +2614,18 @@ var SceneFX = (function(){
   /* ---------------- small builders ---------------- */
   function makeFish(color,scale){
     var grp=new THREE.Group();
-    var body=new THREE.Mesh(new THREE.SphereGeometry(0.32,10,8), mat(color,{roughness:0.5}));
+    var body=new THREE.Mesh(new THREE.SphereGeometry(0.32,16,12), mat(color,{roughness:0.45}));
     body.scale.set(1.5,0.75,0.5); body.castShadow=true; grp.add(body);
-    var tail=new THREE.Mesh(new THREE.ConeGeometry(0.2,0.42,6), mat(color,{roughness:0.5}));
+    var tail=new THREE.Mesh(new THREE.ConeGeometry(0.2,0.42,8), mat(color,{roughness:0.5}));
     tail.position.set(-0.58,0,0); tail.rotation.z=Math.PI/2; grp.add(tail);
-    var fin=new THREE.Mesh(new THREE.ConeGeometry(0.11,0.26,6), mat(color,{roughness:0.5}));
+    var fin=new THREE.Mesh(new THREE.ConeGeometry(0.11,0.26,8), mat(color,{roughness:0.5}));
     fin.position.set(0.02,0.24,0); grp.add(fin);
+    [-0.1,0.1].forEach(function(z){ // pectoral fins, angled like a real fish
+      var pf=new THREE.Mesh(new THREE.ConeGeometry(0.08,0.24,7), mat(color,{roughness:0.5}));
+      pf.position.set(0.12,-0.1,z*1.8); pf.rotation.x=z>0?2.5:-2.5; pf.rotation.z=0.5; grp.add(pf);
+    });
     [-0.13,0.13].forEach(function(z){
-      var eye=new THREE.Mesh(new THREE.SphereGeometry(0.045,6,5), mat(0x1c1c1c,{roughness:0.3}));
+      var eye=new THREE.Mesh(new THREE.SphereGeometry(0.045,8,6), mat(0x1c1c1c,{roughness:0.3}));
       eye.position.set(0.3,0.07,z); grp.add(eye);
     });
     grp.scale.setScalar(scale||1);
@@ -2623,15 +2658,15 @@ var SceneFX = (function(){
     if(opts.seated){
       put(grp, box(0.9,0.18,0.62,0x6b4423), 0,0.46,-0.08); // bench seat
       [-0.17,0.17].forEach(function(x){
-        put(grp, box(0.24,0.22,0.72,pants), x,0.6,0.28);            // thighs forward
-        put(grp, box(0.22,0.58,0.24,pants), x,0.28,0.58);           // shins down
+        put(grp, cyl(0.125,0.11,0.72,pants,{roughness:0.95},10), x,0.6,0.28).rotation.x=Math.PI/2; // thighs forward, rounded
+        put(grp, cyl(0.105,0.088,0.58,pants,{roughness:0.95},10), x,0.28,0.58);           // shins down
         put(grp, box(0.24,0.11,0.4,0x2a2320), x,0.055,0.66);        // shoes
         put(grp, box(0.25,0.045,0.42,0xfdf8ec,{roughness:0.5}), x,0.022,0.66); // white shoe soles
       });
       bodyBaseY=0.66;
     } else {
       [-0.17,0.17].forEach(function(x){
-        put(grp, box(0.25,0.95,0.27,pants), x,0.48,0);
+        put(grp, cyl(0.128,0.105,0.95,pants,{roughness:0.95},10), x,0.48,0); // rounded legs
         put(grp, box(0.27,0.12,0.44,0x2a2320), x,0.06,0.07);
         put(grp, box(0.28,0.045,0.46,0xfdf8ec,{roughness:0.5}), x,0.022,0.07); // white shoe soles
       });
@@ -2656,56 +2691,60 @@ var SceneFX = (function(){
     put(bodyG, cyl(0.09,0.1,0.14,skin), 0,0.86,0);
     // head group
     var headG=new THREE.Group(); headG.position.y=1.24; bodyG.add(headG); u.headG=headG;
-    put(headG, box(0.58,0.62,0.56,skin,{roughness:0.55}), 0,0,0);
-    put(headG, box(0.09,0.17,0.07,skin,{roughness:0.55}), -0.33,0,0);
-    put(headG, box(0.09,0.17,0.07,skin,{roughness:0.55}),  0.33,0,0);
-    put(headG, box(0.13,0.15,0.09,skin,{roughness:0.55}), 0,-0.03,0.31); // nose
+    // a proper rounded head — sphere, slightly egg-shaped — with round
+    // ears and a round nose; face features sit ON the curve of it
+    var headMesh=new THREE.Mesh(new THREE.SphereGeometry(0.315,16,13), skin); headMesh.scale.set(0.94,1.0,0.9); headMesh.castShadow=true; headG.add(headMesh);
+    [-0.29,0.29].forEach(function(x){
+      var ear=new THREE.Mesh(new THREE.SphereGeometry(0.075,8,7), skin); ear.scale.set(0.55,1,0.8); ear.position.set(x,0,0); headG.add(ear);
+    });
+    var noseMesh=new THREE.Mesh(new THREE.SphereGeometry(0.068,9,8), skin); noseMesh.position.set(0,-0.03,0.285); headG.add(noseMesh);
     if(opts.hairLong){
       put(headG, box(0.62,0.95,0.15,hairM), 0,-0.28,-0.3);
       put(headG, box(0.13,0.6,0.4,hairM), -0.33,-0.15,-0.08);
       put(headG, box(0.13,0.6,0.4,hairM),  0.33,-0.15,-0.08);
     }
-    if(opts.beard) put(headG, box(0.46,0.3,0.07,hairM), 0,-0.3,0.27);
+    if(opts.beard){ var beardMesh=new THREE.Mesh(new THREE.SphereGeometry(0.3,12,9), hairM); beardMesh.scale.set(0.78,0.52,0.3); beardMesh.position.set(0,-0.27,0.21); headG.add(beardMesh); }
     // eyes (white + pupil) in blink groups
     function makeEye(x){
-      var eg=new THREE.Group(); eg.position.set(x,0.09,0.285);
+      var eg=new THREE.Group(); eg.position.set(x,0.09,0.262);
       put(eg, box(0.14,0.16,0.03,0xffffff,{roughness:0.3}), 0,0,0);
       put(eg, box(0.065,0.085,0.02,0x201a14,{roughness:0.3}), 0,-0.01,0.02);
       headG.add(eg); return eg;
     }
     u.eyeL=makeEye(-0.14); u.eyeR=makeEye(0.14);
-    u.browL=put(headG, box(0.17,0.04,0.02,opts.hair), -0.14,0.245,0.29);
-    u.browR=put(headG, box(0.17,0.04,0.02,opts.hair),  0.14,0.245,0.29);
-    // mouths: neutral / smile / frown / "o"
+    u.browL=put(headG, box(0.17,0.04,0.02,opts.hair), -0.14,0.245,0.205); u.browL.rotation.x=-0.45;
+    u.browR=put(headG, box(0.17,0.04,0.02,opts.hair),  0.14,0.245,0.205); u.browR.rotation.x=-0.45;
+    // mouths: neutral / smile / frown / "o" — placed on the curve of the face
     var mouths={};
-    mouths.neutral=put(headG, box(0.15,0.028,0.02,0x7a4632), 0,-0.17,0.29);
+    mouths.neutral=put(headG, box(0.15,0.028,0.02,0x7a4632), 0,-0.17,0.24);
     var smile=new THREE.Mesh(new THREE.TorusGeometry(0.088,0.02,6,14,Math.PI), mat(0x7a4632,{roughness:0.5}));
-    smile.position.set(0,-0.12,0.29); smile.rotation.z=Math.PI; headG.add(smile); mouths.happy=smile;
+    smile.position.set(0,-0.12,0.245); smile.rotation.z=Math.PI; headG.add(smile); mouths.happy=smile;
     var frown=new THREE.Mesh(new THREE.TorusGeometry(0.08,0.02,6,14,Math.PI), mat(0x7a4632,{roughness:0.5}));
-    frown.position.set(0,-0.24,0.29); headG.add(frown); mouths.sad=frown;
+    frown.position.set(0,-0.22,0.2); headG.add(frown); mouths.sad=frown;
     var om=new THREE.Mesh(new THREE.TorusGeometry(0.045,0.017,6,14), mat(0x7a4632,{roughness:0.5}));
-    om.position.set(0,-0.17,0.29); headG.add(om); mouths.o=om;
+    om.position.set(0,-0.17,0.24); headG.add(om); mouths.o=om;
     smile.visible=false; frown.visible=false; om.visible=false;
     u.mouths=mouths;
     // hats — two distinct silhouettes
     if(opts.hatStyle==="cap"){
-      put(headG, box(0.62,0.15,0.6,hatM), 0,0.37,0);
-      put(headG, box(0.56,0.05,0.36,hatM), 0,0.31,0.44);
-      put(headG, box(0.12,0.06,0.12,0xfdf8ec), 0,0.47,0);
+      var capDome=new THREE.Mesh(new THREE.SphereGeometry(0.325,16,9,0,Math.PI*2,0,Math.PI/2), hatM);
+      capDome.scale.set(0.96,0.72,0.93); capDome.position.y=0.29; capDome.castShadow=true; headG.add(capDome);
+      put(headG, cyl(0.3,0.32,0.045,hatM,{roughness:0.9},14), 0,0.315,0.3).rotation.x=1.35; // curved brim
+      put(headG, new THREE.Mesh(new THREE.SphereGeometry(0.055,8,7), mat(0xfdf8ec,{roughness:0.6})), 0,0.53,0);
       if(opts.hairLong) put(headG, box(0.2,0.34,0.12,hairM), 0,0.12,-0.4); // ponytail out the back
     } else {
-      put(headG, cyl(0.47,0.47,0.05,hatM), 0,0.33,0, 18);
-      put(headG, cyl(0.26,0.29,0.26,hatM), 0,0.46,0, 14);
+      put(headG, cyl(0.47,0.47,0.05,hatM), 0,0.33,0, 24);
+      put(headG, cyl(0.26,0.29,0.26,hatM), 0,0.46,0, 18);
       put(headG, box(0.54,0.07,0.54,0xf5a524), 0,0.33,0);
     }
     // arms: shoulder pivots -> upper arm -> elbow pivot -> forearm + hand
     function makeArm(side){
       var sh=new THREE.Group(); sh.position.set(0.5*side,0.68,0); bodyG.add(sh);
-      put(sh, box(0.18,0.54,0.18,shirt), 0,-0.24,0);
-      put(sh, box(0.19,0.14,0.19,vestM), 0,-0.05,0);
+      put(sh, cyl(0.1,0.088,0.54,shirt,{roughness:0.92},10), 0,-0.24,0); // rounded upper arm
+      put(sh, cyl(0.115,0.115,0.15,vestM,{roughness:0.92},10), 0,-0.05,0);
       var el=new THREE.Group(); el.position.y=-0.5; sh.add(el);
-      put(el, box(0.15,0.46,0.15,skin,{roughness:0.55}), 0,-0.2,0);
-      put(el, box(0.17,0.17,0.17,skin,{roughness:0.55}), 0,-0.47,0.02);
+      put(el, cyl(0.08,0.068,0.46,skin,{roughness:0.55},10), 0,-0.2,0); // rounded forearm
+      var hand=new THREE.Mesh(new THREE.SphereGeometry(0.095,10,8), skin); hand.scale.set(1,1.15,1); hand.position.set(0,-0.47,0.02); hand.castShadow=true; el.add(hand);
       return { sh:sh, el:el };
     }
     var armR=makeArm(1), armL=makeArm(-1);
@@ -3034,20 +3073,23 @@ var SceneFX = (function(){
     renderer.shadowMap.type=THREE.PCFSoftShadowMap;
     // warm filmic grading for depth — a plain renderer setting, no
     // post-processing chain, nothing that can wash out or blank the pond
-    if(THREE.ACESFilmicToneMapping!=null){ renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05; }
+    if(THREE.ACESFilmicToneMapping!=null){ renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.12; }
     if("outputColorSpace" in renderer && THREE.SRGBColorSpace) renderer.outputColorSpace=THREE.SRGBColorSpace;
     wrap.insertBefore(renderer.domElement, wrap.firstChild);
     scene=new THREE.Scene();
-    scene.background=new THREE.Color(0x7ec3e0);
-    scene.fog=new THREE.Fog(0x7ec3e0, 42, 88);
+    // golden hour: warm amber sky and haze, a low warm sun raking long
+    // soft shadows across the pond, cool blue fill in the shade — the
+    // whole diorama sits in late-evening light
+    scene.background=new THREE.Color(0xe9a869);
+    scene.fog=new THREE.Fog(0xe9a869, 46, 95);
     camera=new THREE.PerspectiveCamera(54, 1, 0.1, 200);
-    scene.add(new THREE.HemisphereLight(0xcfefff, 0x1d4e4a, 0.78));
-    var sun=new THREE.DirectionalLight(0xffe9bd, 1.85); sun.position.set(11,19,7);
+    scene.add(new THREE.HemisphereLight(0xffdca8, 0x274b43, 0.62));
+    var sun=new THREE.DirectionalLight(0xffb168, 2.1); sun.position.set(15,10.5,6);
     sun.castShadow=true; sun.shadow.mapSize.set(2048,2048);
-    sun.shadow.camera.left=-26; sun.shadow.camera.right=26; sun.shadow.camera.top=26; sun.shadow.camera.bottom=-26; sun.shadow.camera.far=65;
+    sun.shadow.camera.left=-26; sun.shadow.camera.right=26; sun.shadow.camera.top=26; sun.shadow.camera.bottom=-26; sun.shadow.camera.far=70;
     sun.shadow.bias=-0.0003; if("normalBias" in sun.shadow) sun.shadow.normalBias=0.03;
     scene.add(sun);
-    var fill=new THREE.DirectionalLight(0xbfe8ff, 0.32); fill.position.set(-8,10,-10); scene.add(fill);
+    var fill=new THREE.DirectionalLight(0x87b5e0, 0.28); fill.position.set(-9,8,-11); scene.add(fill);
     var warm=new THREE.PointLight(0xffc46b, 0.5, 12); warm.position.set(3.4,3.1,9.2); scene.add(warm);
     backTex=cardBackTexture();
     var woodTex=woodTexture();
@@ -3058,45 +3100,58 @@ var SceneFX = (function(){
        banks — rich and vivid in a still screenshot, plain materials only,
        never a blinding white ----- */
     waterDetailTex=waterTexture(); waterDetailTex.repeat.set(5,5);
-    var water=new THREE.Mesh(new THREE.CircleGeometry(17.5,56), mat(0x1a74b8,{map:waterDetailTex, roughness:0.28, metalness:0.12}));
-    water.rotation.x=-Math.PI/2; water.receiveShadow=true; scene.add(water);
+    // the surface is a real segmented disc now: its vertices ride waveH()
+    // every frame (see tick) — gentle moving swells with true shifting
+    // normals catching the low sun, not a flat painted circle
+    var wgeo=new THREE.RingGeometry(0.02,17.5,72,9); wgeo.rotateX(-Math.PI/2);
+    waterGeo=wgeo; waterBase=wgeo.attributes.position.array.slice();
+    var water=new THREE.Mesh(wgeo, mat(0x1a74b8,{map:waterDetailTex, roughness:0.24, metalness:0.12}));
+    water.receiveShadow=true; scene.add(water);
     sheenDetailTex=waterTexture(); sheenDetailTex.repeat.set(3,3);
     var sheen=new THREE.Mesh(new THREE.CircleGeometry(17.5,56), mat(0x3fa9e0,{map:sheenDetailTex, roughness:0.25, metalness:0.15, transparent:true, opacity:0.3}));
-    sheen.rotation.x=-Math.PI/2; sheen.position.y=0.012; scene.add(sheen);
+    sheen.rotation.x=-Math.PI/2; sheen.position.y=0.06; scene.add(sheen);
     function depthBand(geo,color,op,y,rough){
       var b=new THREE.Mesh(geo, mat(color,{roughness:rough||0.32, transparent:true, opacity:op}));
       b.rotation.x=-Math.PI/2; b.position.y=y; scene.add(b); return b;
     }
-    depthBand(new THREE.RingGeometry(13.4,17.4,56), 0x2fc4b2, 0.5, 0.017);        // turquoise shallows
-    depthBand(new THREE.RingGeometry(9.7,13.45,56), 0x1f8fd0, 0.38, 0.02);        // bright azure step
-    depthBand(new THREE.RingGeometry(6.3,9.75,56), 0x0d4d8f, 0.42, 0.023);        // royal blue
-    depthBand(new THREE.CircleGeometry(6.4,40), 0x0b3a63, 0.58, 0.026);           // deep navy
-    depthBand(new THREE.CircleGeometry(3.9,36), 0x06294d, 0.6, 0.029, 0.35);      // navy core round the whirlpool
-    depthBand(new THREE.RingGeometry(16.55,17.46,56), 0x9fe8dc, 0.5, 0.03, 0.4);  // pale foam-turquoise edge
+    depthBand(new THREE.RingGeometry(13.4,17.4,56), 0x2fc4b2, 0.5, 0.062);        // turquoise shallows
+    depthBand(new THREE.RingGeometry(9.7,13.45,56), 0x1f8fd0, 0.38, 0.065);       // bright azure step
+    depthBand(new THREE.RingGeometry(6.3,9.75,56), 0x0d4d8f, 0.42, 0.068);         // royal blue
+    depthBand(new THREE.CircleGeometry(6.4,40), 0x0b3a63, 0.58, 0.071);            // deep navy
+    depthBand(new THREE.CircleGeometry(3.9,36), 0x06294d, 0.6, 0.074, 0.35);       // navy core round the whirlpool
+    depthBand(new THREE.RingGeometry(16.55,17.46,56), 0x9fe8dc, 0.5, 0.075, 0.4);  // pale foam-turquoise edge
     // weed beds under the surface — soft dark-teal patches in the shallows
     [[11.5,5.5,2.6],[-13,-6.5,3.1],[6,-13.5,2.4],[-7.5,12.5,2.8],[14.5,-3,2.1],[-3,-15,2.5]].forEach(function(wb,wbi){
       var weed=new THREE.Mesh(new THREE.CircleGeometry(wb[2],20), new THREE.MeshBasicMaterial({ color:0x0a5c46, transparent:true, opacity:0.26, depthWrite:false }));
-      weed.rotation.x=-Math.PI/2; weed.position.set(wb[0],0.014,wb[1]); weed.scale.set(1,0.62+rnd(wbi*13)*0.2,1); scene.add(weed);
+      weed.rotation.x=-Math.PI/2; weed.position.set(wb[0],0.058,wb[1]); weed.scale.set(1,0.62+rnd(wbi*13)*0.2,1); scene.add(weed);
     });
     // soft reflections on the surface: a dark soft shape + a light shimmer
-    // streak under the boat, and a long soft reflection under the dock
-    var boatReflection=new THREE.Mesh(new THREE.CircleGeometry(4.4,28), new THREE.MeshBasicMaterial({ color:0x083a5e, transparent:true, opacity:0.34, depthWrite:false }));
-    boatReflection.rotation.x=-Math.PI/2; boatReflection.position.set(-1.6,0.032,-11.4); boatReflection.scale.set(1.25,0.72,1); scene.add(boatReflection);
-    var boatShimmer=new THREE.Mesh(new THREE.CircleGeometry(3.2,24), new THREE.MeshBasicMaterial({ color:0xbfeef5, transparent:true, opacity:0.16, depthWrite:false }));
-    boatShimmer.rotation.x=-Math.PI/2; boatShimmer.position.set(-0.9,0.034,-10.5); boatShimmer.scale.set(1.6,0.6,1); scene.add(boatShimmer);
+    // streak under the (now much bigger) boat, and a long soft reflection
+    // under the dock
+    var boatReflection=new THREE.Mesh(new THREE.CircleGeometry(5.6,28), new THREE.MeshBasicMaterial({ color:0x083a5e, transparent:true, opacity:0.34, depthWrite:false }));
+    boatReflection.rotation.x=-Math.PI/2; boatReflection.position.set(-2.0,0.078,-12.3); boatReflection.scale.set(1.25,0.72,1); scene.add(boatReflection);
+    var boatShimmer=new THREE.Mesh(new THREE.CircleGeometry(3.8,24), new THREE.MeshBasicMaterial({ color:0xffd9a0, transparent:true, opacity:0.18, depthWrite:false }));
+    boatShimmer.rotation.x=-Math.PI/2; boatShimmer.position.set(-1.2,0.08,-11.3); boatShimmer.scale.set(1.6,0.6,1); scene.add(boatShimmer);
     var dockReflection=new THREE.Mesh(new THREE.PlaneGeometry(7.8,3.4), new THREE.MeshBasicMaterial({ color:0x3a2a18, transparent:true, opacity:0.26, depthWrite:false }));
-    dockReflection.rotation.x=-Math.PI/2; dockReflection.position.set(0,0.032,6.3); scene.add(dockReflection);
-    var dockShimmer=new THREE.Mesh(new THREE.CircleGeometry(2.2,24), new THREE.MeshBasicMaterial({ color:0xbfeef5, transparent:true, opacity:0.14, depthWrite:false }));
-    dockShimmer.rotation.x=-Math.PI/2; dockShimmer.position.set(0.6,0.034,5.2); dockShimmer.scale.set(1.8,0.65,1); scene.add(dockShimmer);
+    dockReflection.rotation.x=-Math.PI/2; dockReflection.position.set(0,0.078,6.3); scene.add(dockReflection);
+    var dockShimmer=new THREE.Mesh(new THREE.CircleGeometry(2.2,24), new THREE.MeshBasicMaterial({ color:0xffd9a0, transparent:true, opacity:0.15, depthWrite:false }));
+    dockShimmer.rotation.x=-Math.PI/2; dockShimmer.position.set(0.6,0.08,5.2); dockShimmer.scale.set(1.8,0.65,1); scene.add(dockShimmer);
     [4.6,6.6,9.2,11.8,14.2,16.2].forEach(function(r,i){
       var w=new THREE.Mesh(new THREE.RingGeometry(r-0.07,r+0.07,56), new THREE.MeshBasicMaterial({ color:0xd8f6fb, transparent:true, opacity:0.13, side:THREE.DoubleSide, depthWrite:false }));
-      w.rotation.x=-Math.PI/2; w.position.y=0.035; w.userData.phase=i*1.1; scene.add(w); waves.push(w);
+      w.rotation.x=-Math.PI/2; w.position.y=0.082; w.userData.phase=i*1.1; scene.add(w); waves.push(w);
     });
     // waves lapping the banks: two pale rings at the shoreline (they ride
     // the same gentle swell + fade as the pond's wave rings)
     [16.95,17.3].forEach(function(r,i){
       var lap=new THREE.Mesh(new THREE.RingGeometry(r-0.09,r+0.09,56), new THREE.MeshBasicMaterial({ color:0xeafcff, transparent:true, opacity:0.13, side:THREE.DoubleSide, depthWrite:false }));
-      lap.rotation.x=-Math.PI/2; lap.position.y=0.036; lap.userData.phase=2.2+i*1.7; scene.add(lap); waves.push(lap);
+      lap.rotation.x=-Math.PI/2; lap.position.y=0.083; lap.userData.phase=2.2+i*1.7; scene.add(lap); waves.push(lap);
+    });
+    // ripple rings that endlessly breathe out from the boat's hull and
+    // the dock's front pilings — the water is disturbed where things float
+    [[-4.6,-11.2,0],[0.6,-13.6,0.5],[-3.45,7.5,0.25],[3.45,7.5,0.75]].forEach(function(hp){
+      var hr=new THREE.Mesh(new THREE.RingGeometry(0.46,0.56,30), new THREE.MeshBasicMaterial({ color:0xd8f6fb, transparent:true, opacity:0.3, side:THREE.DoubleSide, depthWrite:false }));
+      hr.rotation.x=-Math.PI/2; hr.position.set(hp[0],0.085,hp[1]); hr.userData.off=hp[2];
+      scene.add(hr); hullRipples.push(hr);
     });
     // foam at the banks: little soft foam blobs scattered along the shoreline
     (function(){
@@ -3104,20 +3159,20 @@ var SceneFX = (function(){
       for(var bfi=0;bfi<44;bfi++){
         var ba2=rnd(bfi*37+5)*Math.PI*2, br2=16.85+rnd(bfi*41)*0.55;
         var blob=new THREE.Mesh(new THREE.SphereGeometry(0.1+rnd(bfi*43)*0.17,7,6), foamBankMat);
-        blob.position.set(Math.cos(ba2)*br2, 0.045, Math.sin(ba2)*br2);
+        blob.position.set(Math.cos(ba2)*br2, 0.08, Math.sin(ba2)*br2);
         blob.scale.y=0.4; blob.castShadow=false; scene.add(blob);
       }
     })();
     (function(){ // sun sparkles
       var n=170, arr=new Float32Array(n*3);
-      for(var i=0;i<n;i++){ var a=rnd(i*3)*Math.PI*2, rr=2+Math.sqrt(rnd(i*7))*15; arr[i*3]=Math.cos(a)*rr; arr[i*3+1]=0.06; arr[i*3+2]=Math.sin(a)*rr; }
+      for(var i=0;i<n;i++){ var a=rnd(i*3)*Math.PI*2, rr=2+Math.sqrt(rnd(i*7))*15; arr[i*3]=Math.cos(a)*rr; arr[i*3+1]=0.1; arr[i*3+2]=Math.sin(a)*rr; }
       var geo=new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(arr,3));
       sparklePts=new THREE.Points(geo, new THREE.PointsMaterial({ color:0xfff3b0, size:0.19, transparent:true, opacity:0.65, depthWrite:false }));
       scene.add(sparklePts);
     })();
     for(var i=0;i<12;i++){
       var r=new THREE.Mesh(new THREE.RingGeometry(0.5,0.58,28), new THREE.MeshBasicMaterial({ color:0xbfeef5, transparent:true, opacity:0.3, side:THREE.DoubleSide, depthWrite:false }));
-      r.rotation.x=-Math.PI/2; r.position.set((rnd(i*31)-0.5)*24, 0.04, (rnd(i*47)-0.5)*24);
+      r.rotation.x=-Math.PI/2; r.position.set((rnd(i*31)-0.5)*24, 0.085, (rnd(i*47)-0.5)*24);
       r.userData.phase=rnd(i*13)*Math.PI*2; scene.add(r); ripples.push(r);
     }
     // lily pads with flowers
@@ -3153,7 +3208,14 @@ var SceneFX = (function(){
     var rim=new THREE.Mesh(new THREE.RingGeometry(17.5,19.6,56), mat(0xb59a67,{map:rimTex, roughness:1}));
     rim.rotation.x=-Math.PI/2; rim.position.y=-0.02; scene.add(rim);
     var stoneTex=stoneTexture();
+    // soft fake contact shadow — a dark soft disc grounding an object
+    var contactMat=new THREE.MeshBasicMaterial({ color:0x14240f, transparent:true, opacity:0.22, depthWrite:false });
+    function contactShadow(x,z,r,y){
+      var cs=new THREE.Mesh(new THREE.CircleGeometry(r,20), contactMat);
+      cs.rotation.x=-Math.PI/2; cs.position.set(x,y||-0.26,z); scene.add(cs); return cs;
+    }
     [[19.5,7],[-20,-4],[14,-17],[-11,19],[21,-11],[-19,13],[16.8,-3.5],[-16.9,-4.2],[12,18.6],[-21,3]].forEach(function(p,ri3){
+      contactShadow(p[0],p[1],1.15+rnd(ri3*31)*0.5);
       var rock=new THREE.Mesh(new THREE.DodecahedronGeometry(0.65+rnd(ri3*31)*0.6), mat(ri3%2?0xbfc4c0:0xb2b8b4,{map:stoneTex, roughness:1}));
       rock.position.set(p[0],0.05,p[1]); rock.rotation.set(ri3*0.7,ri3*1.3,ri3*0.4); rock.castShadow=true; rock.receiveShadow=true; scene.add(rock);
       var rock2=new THREE.Mesh(new THREE.DodecahedronGeometry(0.3+rnd(ri3*41)*0.25), mat(0xc2c8c4,{map:stoneTex, roughness:1}));
@@ -3168,17 +3230,17 @@ var SceneFX = (function(){
         // leafy tree: a round, layered canopy in three greens with a few
         // red berries — variety against the pines, like a real shoreline
         var leafGreens=[0x4d8a3d,0x68a24e,0x3a8142];
-        [[0,3.6,0,1.55],[0.95,3.0,0.35,1.05],[-0.9,3.15,-0.3,1.1],[0.25,4.35,-0.4,0.95]].forEach(function(s,si2){
-          var blob2=new THREE.Mesh(new THREE.SphereGeometry(s[3],8,7), mat(leafGreens[si2%3],{roughness:0.95}));
-          blob2.position.set(s[0],s[1],s[2]); blob2.castShadow=true; tree.add(blob2);
+        [[0,3.6,0,1.55],[0.95,3.0,0.35,1.05],[-0.9,3.15,-0.3,1.1],[0.25,4.35,-0.4,0.95],[-0.35,2.75,0.75,0.8],[0.6,3.9,0.65,0.75]].forEach(function(s,si2){
+          var blob2=new THREE.Mesh(new THREE.SphereGeometry(s[3],13,10), mat(leafGreens[si2%3],{roughness:0.95}));
+          blob2.position.set(s[0],s[1],s[2]); blob2.scale.y=0.88; blob2.castShadow=true; tree.add(blob2);
         });
         for(var bri=0;bri<6;bri++){
           var ba3=rnd(bri*29+ti*7)*Math.PI*2;
           put(tree, box(0.13,0.13,0.13,0xd23b2e,{roughness:0.5}), Math.cos(ba3)*1.35, 3.1+rnd(bri*31)*0.9, Math.sin(ba3)*1.35);
         }
       } else {
-        [2.7,3.8,4.8].forEach(function(y,li){
-          var cone=new THREE.Mesh(new THREE.ConeGeometry(1.75-li*0.42,2.0,7), mat(li%2?0x2e6b34:0x3a8142,{roughness:0.95}));
+        [2.5,3.5,4.45,5.3].forEach(function(y,li){
+          var cone=new THREE.Mesh(new THREE.ConeGeometry(1.85-li*0.4,1.9,11), mat(li%2?0x2e6b34:0x3a8142,{roughness:0.95}));
           cone.position.y=y; cone.castShadow=true; tree.add(cone);
         });
       }
@@ -3187,6 +3249,7 @@ var SceneFX = (function(){
         for(var bbi=0;bbi<4;bbi++) put(tree, box(0.11,0.11,0.11,0xd23b2e,{roughness:0.5}), 0.45+rnd(bbi*37+ti)*0.7, 0.45+rnd(bbi*41)*0.15, 0.15+rnd(bbi*43)*0.5);
       }
       tree.scale.setScalar(0.9+rnd(ti*41)*0.65);
+      contactShadow(p[0],p[1],2.4*tree.scale.x);
       tree.position.set(p[0],-0.2,p[1]); scene.add(tree);
       swayers.push({ grp:tree, phase:ti*1.91, amp:0.008, speed:0.55 });
     });
@@ -3216,7 +3279,7 @@ var SceneFX = (function(){
     }
     for(var ci2=0;ci2<5;ci2++){ // boxy drifting clouds
       var cloud=new THREE.Group();
-      var cm=new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.88 });
+      var cm=new THREE.MeshBasicMaterial({ color:0xffe7c4, transparent:true, opacity:0.88 });
       [[0,0,0,2.8,0.75,1.5],[1.7,0.12,0.25,1.9,0.6,1.15],[-1.6,0.08,-0.2,2.0,0.55,1.2],[0.5,0.45,-0.3,1.4,0.55,1.0]].forEach(function(b){
         var puff=box(b[3],b[4],b[5],cm); puff.castShadow=false; puff.position.set(b[0],b[1],b[2]); cloud.add(puff);
       });
@@ -3321,7 +3384,7 @@ var SceneFX = (function(){
     pilingPos.forEach(function(p,pi2){
       var tall = pi2<2;
       var flush = pi2===6; // the centre-front piling stops flush under the deck — nothing pokes up in front of the angler
-      var post=cyl(0.19,0.21, flush?2.3:(tall?3.9:2.9), 0x6b4423,{roughness:0.95},9);
+      var post=cyl(0.19,0.21, flush?2.3:(tall?3.9:2.9), 0x6b4423,{roughness:0.95},12);
       post.position.set(p[0], flush?-0.12:(tall?0.75:0.25), p[1]); pier.add(post);
       if(!flush) put(pier, cyl(0.23,0.23,0.14,0x54381c,{roughness:0.95},9), p[0], tall?2.62:1.62, p[1]); // cap band
       for(var bi2=0;bi2<6;bi2++){ // barnacles at the waterline
@@ -3393,33 +3456,69 @@ var SceneFX = (function(){
     ringGrp.position.set(-3.55,1.9,11.2); ringGrp.rotation.y=Math.PI/2; pier.add(ringGrp);
     scene.add(pier);
 
-    /* ----- boat: a proper little fishing boat, BIGGER than before —
-       plank seams, a bold painted stripe, bench seats with cushions,
-       outboard motor, tackle box, cooler, two oars, anchor + rope,
-       spinning propeller, wake ----- */
-    var boat=new THREE.Group(); boat.position.set(-1.6,0.18,-11.4); boat.rotation.y=0.22; boatGroup=boat;
-    var hullMat=new THREE.MeshStandardMaterial({ map:woodTex, color:0xa8763e, roughness:0.82 });
-    var hull=box(4.7,0.55,1.95,hullMat); hull.position.y=0.18; boat.add(hull);
-    [-0.99,0.99].forEach(function(z){
-      var side=box(4.7,0.6,0.13,hullMat); side.position.set(0,0.62,z); boat.add(side);
-      put(boat, box(4.72,0.05,0.14,0x5a3a1a,{roughness:0.9}), 0,0.42,z); // plank seam
-      put(boat, box(4.72,0.05,0.14,0x5a3a1a,{roughness:0.9}), 0,0.78,z);
-      put(boat, box(4.95,0.13,0.26,0xc79a63,{roughness:0.85}), 0,0.95,z*1.02); // gunwale
-    });
-    // a bold painted stripe along both hull sides, white pinstripe above
-    // it, and the stripe carried across the transom
-    [-1,1].forEach(function(ss){
-      put(boat, box(4.74,0.26,0.15,0x12b8d4,{roughness:0.45}), 0,0.62,ss*1.0);
-      put(boat, box(4.74,0.08,0.15,0xfdf8ec,{roughness:0.5}), 0,0.83,ss*1.0);
-    });
-    put(boat, box(0.15,0.26,1.9,0x12b8d4,{roughness:0.45}), -2.42,0.62,0);
-    var bow=box(1.6,0.85,1.95,hullMat); bow.position.set(2.85,0.5,0); bow.rotation.y=Math.PI/4; bow.scale.set(1,1,0.72); boat.add(bow);
-    put(boat, box(4.3,0.14,1.65,0xc79a63,{roughness:0.9}), 0,0.42,0); // floor
+    /* ----- boat: REBUILT and much bigger — a shaped hull with a curved
+       bow and rounded stern (no boxes), beveled edges, plank grain with
+       seams and nail heads, a painted stripe that follows the hull
+       curve, bench seats with backs and cushions, coiled ropes, a
+       latched tackle box, a lantern with a real warm light, fenders,
+       cleats, outboard motor, cooler, two oars, anchor + rope, spinning
+       propeller, wake. Scaled to ~1.7x below: about twice the volume of
+       the old boat, so it commands the pond. ----- */
+    var boat=new THREE.Group(); boat.position.set(-2.0,0.18,-12.3); boat.rotation.y=0.22; boatGroup=boat;
+    var hullTex=woodTex.clone(); hullTex.wrapS=hullTex.wrapT=THREE.RepeatWrapping; hullTex.repeat.set(0.45,0.45); hullTex.needsUpdate=true;
+    var hullMat=new THREE.MeshStandardMaterial({ map:hullTex, color:0xbf8c52, roughness:0.82 });
+    var deckMat=new THREE.MeshStandardMaterial({ map:hullTex, color:0xe6c88f, roughness:0.9 });
+    var capMat=new THREE.MeshStandardMaterial({ map:hullTex, color:0xd8b083, roughness:0.85 });
+    // one hull outline (top view: x = length, bow at +x; y = width),
+    // traced onto a Shape or a hole Path so the shell, rim, stripe,
+    // pinstripe, cap rail and deck all share the exact same curve
+    function traceHull(p,s){
+      p.moveTo(-2.6*s,-0.78*s);
+      p.lineTo(1.55*s,-0.98*s);
+      p.quadraticCurveTo(2.75*s,-0.84*s, 3.55*s,0);   // the bow sweep
+      p.quadraticCurveTo(2.75*s,0.84*s, 1.55*s,0.98*s);
+      p.lineTo(-2.6*s,0.78*s);
+      p.quadraticCurveTo(-2.95*s,0, -2.6*s,-0.78*s);  // rounded stern
+      return p;
+    }
+    function hullPiece(shape,depth,bevel,material,y){
+      var geo=new THREE.ExtrudeGeometry(shape,{ depth:depth, bevelEnabled:bevel>0, bevelThickness:bevel||0, bevelSize:bevel?bevel*0.85:0, bevelSegments:2, steps:1, curveSegments:24 });
+      var m=new THREE.Mesh(geo, material); m.castShadow=true; m.receiveShadow=true;
+      m.rotation.x=-Math.PI/2; m.position.y=y; boat.add(m); return m;
+    }
+    hullPiece(traceHull(new THREE.Shape(),1.0), 0.34, 0.13, hullMat, 0.03); // hull shell, beveled bottom edge
+    var rimShape=traceHull(new THREE.Shape(),1.0); rimShape.holes.push(traceHull(new THREE.Path(),0.84));
+    hullPiece(rimShape, 0.4, 0.045, hullMat, 0.44);                          // rim wall — the open cockpit
+    var stripeShape=traceHull(new THREE.Shape(),1.03); stripeShape.holes.push(traceHull(new THREE.Path(),0.965));
+    hullPiece(stripeShape, 0.24, 0.02, mat(0x14c4e6,{roughness:0.42}), 0.5); // painted stripe hugging the hull
+    var pinShape=traceHull(new THREE.Shape(),1.032); pinShape.holes.push(traceHull(new THREE.Path(),0.99));
+    hullPiece(pinShape, 0.07, 0.015, mat(0xfdf8ec,{roughness:0.5}), 0.76);    // white pinstripe above it
+    var capShape=traceHull(new THREE.Shape(),1.05); capShape.holes.push(traceHull(new THREE.Path(),0.80));
+    hullPiece(capShape, 0.07, 0.03, capMat, 0.86);                           // gunwale cap rail
+    var deck=new THREE.Mesh(new THREE.ShapeGeometry(traceHull(new THREE.Shape(),0.845),24), deckMat);
+    deck.rotation.x=-Math.PI/2; deck.position.y=0.505; deck.receiveShadow=true; boat.add(deck); // plank deck inlay
+    // bench seats with backs and cushions — real seating, not blocks
     [-1.25,0.75].forEach(function(x){
-      put(boat, box(0.55,0.34,1.7,0x6b4423,{roughness:0.9}), x,0.55,0);
-      put(boat, box(0.52,0.13,1.58,0xc23325,{roughness:0.65}), x,0.86,0); // cushion
-      put(boat, box(0.52,0.03,0.2,0x8f1f14,{roughness:0.65}), x,0.93,0);
+      put(boat, box(0.55,0.24,1.55,0x6b4423,{roughness:0.9}), x,0.62,0);              // bench base / storage box
+      put(boat, box(0.58,0.13,1.58,0xc23325,{roughness:0.65}), x,0.8,0);              // seat cushion
+      put(boat, box(0.52,0.03,0.2,0x8f1f14,{roughness:0.65}), x,0.875,0);             // cushion seam
+      var backB=put(boat, box(0.5,0.52,0.09,0x6b4423,{roughness:0.9}), x,0.98,-0.72); backB.rotation.x=-0.13; // backrest
+      var backC=put(boat, box(0.46,0.4,0.06,0xc23325,{roughness:0.65}), x,0.99,-0.66); backC.rotation.x=-0.13; // back cushion
     });
+    // coiled rope stacks on the bow deck and by the stern bench
+    [[2.0,0.42],[-1.95,-0.45]].forEach(function(cp){
+      for(var ci3=0;ci3<3;ci3++){
+        var coilB=new THREE.Mesh(new THREE.TorusGeometry(0.3-ci3*0.035,0.05,7,20), mat(0xc9a86a,{roughness:0.95}));
+        coilB.rotation.x=Math.PI/2; coilB.position.set(cp[0],0.56+ci3*0.09,cp[1]); coilB.castShadow=true; boat.add(coilB);
+      }
+    });
+    // fenders hanging over the pond side on short ropes + two steel cleats
+    [-1.3,1.15].forEach(function(fx){
+      var fender=cyl(0.1,0.1,0.52,0xfdf8ec,{roughness:0.5},10); fender.position.set(fx,0.52,1.12); boat.add(fender);
+      put(boat, cyl(0.1,0.1,0.1,0xc23325,{roughness:0.5},10), fx,0.72,1.12);
+      boat.add(ropeCurve([new THREE.Vector3(fx,0.93,1.03), new THREE.Vector3(fx,0.8,1.14), new THREE.Vector3(fx,0.76,1.12)],0.022,0x8a6b42));
+    });
+    [-0.4,1.9].forEach(function(cx2){ put(boat, box(0.3,0.06,0.1,0x8b949c,{metalness:0.6,roughness:0.35}), cx2,0.97,0.95); });
     // outboard motor + spinning propeller
     put(boat, box(0.24,0.3,0.5,0x3d4450,{roughness:0.5, metalness:0.3}), -2.5,0.8,0);
     put(boat, box(0.52,0.55,0.42,0x2e3440,{roughness:0.45, metalness:0.3}), -2.62,1.12,0);
@@ -3436,7 +3535,7 @@ var SceneFX = (function(){
     // wake: foam rings trailing the stern, forever cycling
     for(var wi=0;wi<6;wi++){
       var wk=new THREE.Mesh(new THREE.RingGeometry(0.42,0.58,20), new THREE.MeshBasicMaterial({ color:0xeafcff, transparent:true, opacity:0.4, side:THREE.DoubleSide, depthWrite:false }));
-      wk.rotation.x=-Math.PI/2; wk.position.set(-3.3-wi*0.85,-0.12,(wi%2?0.3:-0.3));
+      wk.rotation.x=-Math.PI/2; wk.position.set(-3.3-wi*0.85,-0.04,(wi%2?0.3:-0.3));
       boat.add(wk); wakes.push({ mesh:wk, off:wi/6 });
     }
     // anchor hanging off the bow on its rope
@@ -3447,14 +3546,18 @@ var SceneFX = (function(){
     boat.add(ropeCurve([new THREE.Vector3(2.3,0.95,1.0), new THREE.Vector3(2.5,0.4,1.18), new THREE.Vector3(2.36,-0.05,1.15)],0.03,0x8a6b42));
     // bow lantern, cooler, bucket, oar, flag
     put(boat, cyl(0.05,0.06,0.75,0x241d16,{roughness:0.85},7), 2.15,1.25,0.75);
-    var bLant=makeLantern(0.95); bLant.position.set(2.15,1.78,0.75); boat.add(bLant);
+    var bLant=makeLantern(1.3); bLant.position.set(2.15,1.82,0.75); boat.add(bLant);
+    var boatLamp=new THREE.PointLight(0xffb45e, 0.9, 7.5); boatLamp.position.set(2.15,1.85,0.75); boat.add(boatLamp); // the lantern's real warm glow
     put(boat, box(0.8,0.5,0.55,0xfdf8ec,{roughness:0.5}), -1.95,0.72,-0.55);
     put(boat, box(0.84,0.1,0.59,0x2e7d9e,{roughness:0.5}), -1.95,1.0,-0.55);
     var bBucket=cyl(0.24,0.19,0.42,0xc23325,{roughness:0.55},11); bBucket.position.set(1.55,0.68,-0.6); boat.add(bBucket);
-    // tackle box on the floor by the front bench — red, dark lid, handle
-    var bTackle=box(0.8,0.4,0.42,0xc23325,{roughness:0.55}); bTackle.position.set(1.5,0.69,0.55); boat.add(bTackle);
-    put(boat, box(0.82,0.08,0.44,0x8f1f14,{roughness:0.55}), 1.5,0.91,0.55);
-    var tkHandle=new THREE.Mesh(new THREE.TorusGeometry(0.13,0.024,6,12,Math.PI), mat(0x5a6068,{metalness:0.5,roughness:0.4})); tkHandle.position.set(1.5,0.95,0.55); boat.add(tkHandle);
+    // tackle box on the floor by the front bench — red, dark lid, two
+    // steel latches, a handle, and a tray line round the middle
+    var bTackle=box(0.95,0.44,0.46,0xc23325,{roughness:0.55}); bTackle.position.set(1.5,0.72,0.55); boat.add(bTackle);
+    put(boat, box(0.97,0.09,0.48,0x8f1f14,{roughness:0.55}), 1.5,0.96,0.55);
+    put(boat, box(0.97,0.035,0.48,0x8f1f14,{roughness:0.55}), 1.5,0.8,0.55);
+    [-0.26,0.26].forEach(function(lx){ put(boat, box(0.11,0.16,0.03,0x8b949c,{metalness:0.6,roughness:0.35}), 1.5+lx,0.9,0.79); }); // latches
+    var tkHandle=new THREE.Mesh(new THREE.TorusGeometry(0.15,0.026,6,12,Math.PI), mat(0x5a6068,{metalness:0.5,roughness:0.4})); tkHandle.position.set(1.5,1.0,0.55); boat.add(tkHandle);
     var oarGrp=new THREE.Group();
     var oarShaft=cyl(0.045,0.045,2.6,0xa97a45,{roughness:0.9},7); oarGrp.add(oarShaft);
     put(oarGrp, box(0.2,0.85,0.05,0xa97a45,{roughness:0.9}), 0,-1.6,0);
@@ -3466,7 +3569,7 @@ var SceneFX = (function(){
     oarGrp2.position.set(1.9,0.8,-1.3); oarGrp2.rotation.set(-0.35,0,1.15); boat.add(oarGrp2);
     put(boat, cyl(0.03,0.03,1.5,0x6b4423,{roughness:0.9},6), -2.25,1.6,-0.8);
     var flag=box(0.55,0.34,0.03,0xf5a524,{roughness:0.6}); flag.position.set(-1.95,2.15,-0.8); boat.add(flag); boat.userData.flag=flag;
-    boat.scale.setScalar(1.35); // BIGGER, for sure — prominent in the pond, still a boat, never a barge
+    boat.scale.setScalar(1.7); // ~1.26x longer/wider than the 1.35 build = ~2x the volume — it commands the pond
     scene.add(boat);
 
     /* ----- anglers ----- */
@@ -3475,9 +3578,9 @@ var SceneFX = (function(){
     // front planks — the sign is gone, nothing stands in front of her.
     youA.position.set(0,1.16,8.95); youA.rotation.y=Math.PI; youA.scale.setScalar(1.38); scene.add(youA); anglers.pier=youA;
     var oppA=makeAngler({ shirt:0x2e7d9e, vest:0x7a3a9e, hat:0x205a7a, hatStyle:"brim", hair:0x33302c, hairLong:false, beard:true, skin:0xc98a5e, seated:true, seed:7 });
-    // the boat angler scales WITH the bigger boat, seated in the same spot
-    // relative to the hull as in the working version
-    oppA.position.set(-1.4,0.77,-11.27); oppA.rotation.y=0.22; oppA.scale.setScalar(1.86); scene.add(oppA); anglers.boat=oppA;
+    // the boat angler scales WITH the bigger boat (1.38 x boat scale),
+    // seated on the new deck in the same spot between the benches
+    oppA.position.set(-1.78,0.99,-12.12); oppA.rotation.y=0.22; oppA.scale.setScalar(2.35); scene.add(oppA); anglers.boat=oppA;
     [youA,oppA].forEach(function(a){
       scene.add(a.userData.bobber); scene.add(a.userData.line);
       var fwd=new THREE.Vector3(Math.sin(a.rotation.y),0,Math.cos(a.rotation.y));
@@ -3504,15 +3607,15 @@ var SceneFX = (function(){
     });
     goldie.scale.setScalar(1.3);
     scene.add(goldie);
-    // a small school drifting UNDER the surface — dark silhouettes at
-    // y=0.015, above the opaque water base but beneath the tinted depth
-    // bands, so they read as fish below the surface, circling slowly
+    // a small school drifting UNDER the surface — dark silhouettes just
+    // above the swells but beneath the tinted depth bands, so they read
+    // as fish below the surface, circling slowly
     (function(){
       var schoolCols=[0x0d4a63,0x14506e,0x0a4260];
       for(var sfi=0;sfi<5;sfi++){
         var sf=makeFish(schoolCols[sfi%3], 0.85);
         sf.traverse(function(ch){ if(ch.isMesh){ ch.castShadow=false; ch.material=new THREE.MeshBasicMaterial({ color:schoolCols[sfi%3], transparent:true, opacity:0.42, depthWrite:false }); } });
-        sf.position.y=0.015;
+        sf.position.y=0.055;
         scene.add(sf);
         schoolFish.push({ grp:sf, ang:sfi*1.35, rad:8.6+sfi*1.15, sp:0.055+(sfi%3)*0.018, ph:sfi*1.7, tail:null });
         sf.children.forEach(function(ch){ if(ch.geometry && ch.geometry.type==="ConeGeometry" && ch.position.x<0) schoolFish[sfi].tail=ch; });
@@ -3713,7 +3816,8 @@ var SceneFX = (function(){
       d.userData.ang+=dt*d.userData.sp*(1+whirlBoost*0.8);
       var a=d.userData.ang;
       var surgeR=d.userData.rad-(0.5+0.5*Math.sin(t*0.6+d.userData.ph))*0.55; // debris surges in toward the funnel, then drifts back out
-      d.position.set(Math.cos(a)*surgeR, 0.1+Math.sin(t*2.2+d.userData.ph)*0.06, Math.sin(a)*surgeR);
+      var dX=Math.cos(a)*surgeR, dZ=Math.sin(a)*surgeR;
+      d.position.set(dX, waveH(dX,dZ,t)+0.1+Math.sin(t*2.2+d.userData.ph)*0.03, dZ);
       d.rotation.y=-a; d.rotation.z=Math.sin(t*1.8+d.userData.ph)*0.3;
     });
     // water life
@@ -3731,9 +3835,25 @@ var SceneFX = (function(){
     // so the surface visibly flows and shimmers instead of sitting still
     if(waterDetailTex){ waterDetailTex.offset.set((t*0.006)%1, (t*0.0024)%1); }
     if(sheenDetailTex){ sheenDetailTex.offset.set((-t*0.0045)%1, (t*0.0035)%1); }
-    // lily pads bobbing on the swell
+    // the swell itself: every water vertex rides waveH(), normals
+    // recomputed so the low sun rakes across moving wave faces
+    if(waterGeo){
+      var wp=waterGeo.attributes.position;
+      for(var wvi=0;wvi<wp.count;wvi++){
+        wp.setY(wvi, waveH(waterBase[wvi*3], waterBase[wvi*3+2], t));
+      }
+      wp.needsUpdate=true;
+      waterGeo.computeVertexNormals();
+    }
+    // ripple rings breathing out from the hull and the dock pilings
+    hullRipples.forEach(function(hr){
+      var hp2=(t*0.3+hr.userData.off)%1;
+      hr.scale.setScalar(0.6+hp2*2.6);
+      hr.material.opacity=0.3*(1-hp2);
+    });
+    // lily pads riding the same swell they float on
     lilies.forEach(function(L){
-      L.grp.position.y=L.baseY+Math.sin(t*1.4+L.phase)*0.028;
+      L.grp.position.y=waveH(L.grp.position.x, L.grp.position.z, t)+0.062+Math.sin(t*1.4+L.phase)*0.006;
       L.grp.rotation.z=Math.sin(t*0.9+L.phase)*0.035;
       L.grp.rotation.x=Math.cos(t*0.7+L.phase)*0.03;
     });
@@ -3745,7 +3865,7 @@ var SceneFX = (function(){
     // the school circling under the surface, tails wiggling
     schoolFish.forEach(function(F){
       F.ang+=dt*F.sp*(1+whirlBoost*0.25);
-      F.grp.position.set(Math.cos(F.ang)*F.rad, 0.015, Math.sin(F.ang)*F.rad);
+      F.grp.position.set(Math.cos(F.ang)*F.rad, 0.055, Math.sin(F.ang)*F.rad);
       F.grp.rotation.y=-F.ang-Math.PI/2;
       F.grp.rotation.z=Math.sin(t*2.2+F.ph)*0.05;
       if(F.tail) F.tail.rotation.y=Math.sin(t*6+F.ph)*0.35;
@@ -3767,14 +3887,16 @@ var SceneFX = (function(){
       var targetR = goldieDash>0 ? 1.9 : 6.4;
       goldieR+=(targetR-goldieR)*0.03;
       goldieAngle+=dt*(goldieDash>0?1.15:0.24);
-      goldie.position.set(Math.cos(goldieAngle)*goldieR, 0.12+Math.sin(t*2.1)*0.05, Math.sin(goldieAngle)*goldieR);
+      var gX=Math.cos(goldieAngle)*goldieR, gZ=Math.sin(goldieAngle)*goldieR;
+      goldie.position.set(gX, waveH(gX,gZ,t)+0.13+Math.sin(t*2.1)*0.03, gZ);
       goldie.rotation.y=-goldieAngle+Math.PI;
       goldie.rotation.z=Math.sin(t*3)*0.07;
       if(goldieTail) goldieTail.rotation.y=Math.sin(t*(goldieDash>0?15:7.5))*0.5;
     }
-    // boat bob, motor, wake, flag
+    // boat bob, motor, wake, flag — the hull rides the pond's own swell
+    var boatBobY=0.18+Math.sin(t*1.3)*0.05+waveH(-2.0,-12.3,t)*0.6;
     if(boatGroup){
-      boatGroup.position.y=0.18+Math.sin(t*1.3)*0.07;
+      boatGroup.position.y=boatBobY;
       boatGroup.rotation.z=Math.sin(t*0.9)*0.025;
       if(prop) prop.rotation.x-=0.85;
       if(boatGroup.userData.flag) boatGroup.userData.flag.rotation.y=Math.sin(t*3.1)*0.38;
@@ -3784,7 +3906,7 @@ var SceneFX = (function(){
         w.mesh.material.opacity=0.42*(1-ph);
       });
     }
-    if(anglers.boat) anglers.boat.position.y=0.77+Math.sin(t*1.3)*0.07; // bobbing WITH the boat (same phase), seated in the bigger hull
+    if(anglers.boat) anglers.boat.position.y=boatBobY+0.81; // bobbing WITH the boat (same swell), seated on the new deck
     clouds.forEach(function(cl){
       cl.position.x+=cl.userData.speed/60;
       if(cl.position.x>34) cl.position.x=-34;
@@ -3832,7 +3954,7 @@ var SceneFX = (function(){
       sharkT+=dt;
       var sa=-0.8+(sharkT/1.7)*Math.PI*2;
       sharkFin.visible=true;
-      sharkFin.position.set(Math.cos(sa)*3.7, 0.02+Math.sin(t*5)*0.03, Math.sin(sa)*3.7);
+      sharkFin.position.set(Math.cos(sa)*3.7, 0.07+Math.sin(t*5)*0.03, Math.sin(sa)*3.7);
       sharkFin.rotation.y=-sa-Math.PI/2; sharkFin.rotation.z=0.12;
       if(sharkT>=1.7) sharkFin.visible=false;
     }
@@ -3920,7 +4042,7 @@ var SceneFX = (function(){
     // turn ring pulse
     if(turnRing && turnRing.userData.pos){
       turnRing.position.set(turnRing.userData.pos.x, turnRing.userData.pos.y, turnRing.userData.pos.z);
-      turnRing.scale.setScalar((1+Math.sin(t*3.2)*0.07)*(turnRing.userData.big?4.0:1));
+      turnRing.scale.setScalar((1+Math.sin(t*3.2)*0.07)*(turnRing.userData.big?4.8:1));
     }
     // camera from preset + seat side + drag orbit
     var sgn= seat===0 ? 1 : -1;

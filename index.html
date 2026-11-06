@@ -319,7 +319,7 @@
   .opp-avatar .dot.off{background:#c23b4e}
   .opp-meta{line-height:1.35;font-size:12.5px;min-width:0}
   .opp-meta b{font-size:14.5px}
-  #game .hand-panel,#game .pile,#game #intelBar,#game .log-panel,#game #waitPanel,#game #endPanel,#game #modStrip,#game #pairsBoardPanel{
+  #game .hand-panel,#game .pile,#game #intelBar,#game .log-panel,#game #waitPanel,#game #endPanel,#game #pairsBoardPanel{
     background:var(--gp);border:1px solid var(--gl);color:var(--gt);
   }
   #game .hand-panel.your-turn{border:2px solid var(--accent);box-shadow:0 0 0 3px rgba(245,165,36,.22),var(--shadow)}
@@ -335,14 +335,6 @@
   .mini-pair{display:inline-flex;gap:3px;padding:3px;border:1.5px solid #1d4a57;border-radius:9px;background:rgba(255,255,255,.05)}
   .mini-card{display:flex;align-items:center;justify-content:center;min-width:28px;height:40px;padding:0 2px;border-radius:5px;background:linear-gradient(165deg,#fffef9,#f6e9cb);color:#17323e;font-family:Georgia,serif;font-size:11.5px;font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.3)}
   .mini-card.red{color:var(--red)}
-  #modStrip{margin-top:10px;border-radius:var(--radius);padding:11px 12px;box-shadow:var(--shadow)}
-  .mod-strip-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:9px;font-size:14.5px}
-  .mod-strip-head .dim{color:var(--gtsoft,#a9c4c0);font-weight:400;font-size:13.5px}
-  .mod-sel-pill{border:1.5px solid var(--gl,#1d4a57);border-radius:999px;padding:4px 12px;font-weight:700;font-size:13.5px;background:var(--gp2,#0a222b)}
-  .mod-strip-row{display:flex;flex-wrap:wrap;gap:8px}
-  .mod-pill{border:1.5px solid var(--gl,#1d4a57);background:var(--gp2,#0a222b);color:var(--gt,#eaf4f2);border-radius:999px;padding:8px 14px;font-size:14px;font-weight:600}
-  .mod-pill.selected{border-color:var(--accent);box-shadow:0 0 0 2px rgba(245,165,36,.4)}
-  .mod-strip-empty{color:var(--gtsoft,#a9c4c0);font-size:13.5px}
   .board-bar{margin-top:10px;background:var(--gp,#0c2b34);border:1px solid var(--gl,#1d4a57);border-radius:var(--radius);padding:11px 14px;display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--gt,#eaf4f2)}
   .board-bar .sum{color:var(--gtsoft,#a9c4c0);font-size:14px}
   .link-btn{background:none;border:none;color:#2ee6c8;font-weight:700;font-size:14.5px;padding:4px 2px;cursor:pointer}
@@ -365,7 +357,62 @@
   #liveNotice{display:none;margin:10px 0 2px;padding:10px 12px;border-radius:12px;background:#0a222b;border:1.5px solid #1d4a57;color:#a9c4c0;font-size:13.5px;line-height:1.5;text-align:left}
   #liveNotice.show{display:block}
   #liveNotice b{color:#eaf4f2}
-  #modStripDesc{color:#eaf4f2}
+  /* ===== Clarity pass: game-over banner, pair celebration, banner results ===== */
+  #game .banner .banner-main{font-weight:600}
+  #game .banner .mod-result{display:block;margin-top:5px;font-weight:800;font-size:14.5px}
+  #game .banner.is-mod{box-shadow:0 0 0 3px rgba(245,165,36,.55),0 4px 16px rgba(0,0,0,.25)}
+  #endBanner{
+    display:none;margin-top:10px;border-radius:16px;padding:18px 16px 14px;text-align:center;
+    box-shadow:var(--shadow);border:2px solid #c77f0a;color:#3a2403;
+    background:linear-gradient(160deg,#ffd76e,#f5a524);
+  }
+  #endBanner.show{display:block;animation:endBannerIn .45s ease both}
+  @keyframes endBannerIn{from{opacity:0;transform:scale(.94) translateY(-6px)}to{opacity:1;transform:scale(1) translateY(0)}}
+  #endBanner.lose{background:linear-gradient(160deg,#e8eef2,#b9cbd6);border-color:#5d7d99;color:#17323e}
+  #endBanner.tie{background:linear-gradient(160deg,#e6f6ff,#9fd0e8);border-color:#2e7d9e;color:#17323e}
+  #endBannerEmoji{font-size:44px;line-height:1}
+  #endBannerTitle{font-family:Georgia,serif;font-size:30px;font-weight:900;margin:6px 0 2px;line-height:1.15}
+  #endBannerScore{font-size:16px;font-weight:700;line-height:1.45}
+  #endBannerReason{font-size:13.5px;font-weight:600;opacity:.85;margin-top:2px}
+  #endBanner .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+  #endBannerNote{font-size:13px;font-weight:600;margin-top:8px;min-height:0}
+  #confettiLayer{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:6}
+  .confetti-piece{position:absolute;top:-18px;width:8px;height:14px;border-radius:2px;opacity:.95;animation:confettiFall linear forwards}
+  @keyframes confettiFall{to{transform:translateY(560px) rotate(680deg);opacity:.7}}
+  #pairOverlay{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:7;
+    opacity:0;transform:scale(.8);
+  }
+  #pairOverlay.show{animation:pairOverlayPop 2.3s ease both}
+  @keyframes pairOverlayPop{0%{opacity:0;transform:scale(.7)}12%{opacity:1;transform:scale(1.06)}22%{transform:scale(1)}78%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.04)}}
+  .pair-overlay-inner{
+    background:rgba(6,32,40,.88);border:3px solid var(--accent);border-radius:18px;color:#fdf8ec;
+    padding:14px 26px 12px;text-align:center;box-shadow:0 10px 34px rgba(0,0,0,.45);
+  }
+  .pair-overlay-title{font-family:Georgia,serif;font-size:40px;font-weight:900;letter-spacing:.04em;color:var(--accent);line-height:1}
+  .pair-overlay-sub{font-size:19px;font-weight:800;margin-top:3px}
+  .pair-overlay-who{font-size:13px;font-weight:700;color:#a9e6d5;margin-top:2px}
+  .pair-sparkles{font-size:17px;letter-spacing:6px;margin-top:4px}
+  .fly-card{
+    position:fixed;z-index:60;width:44px;height:62px;border-radius:7px;pointer-events:none;
+    background:linear-gradient(165deg,#fffef9,#f6e9cb);border:1.5px solid var(--card-line,#e7d9ae);
+    color:#17323e;font-family:Georgia,serif;font-weight:700;font-size:16px;
+    display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.4);
+  }
+  .fly-card.red{color:var(--red)}
+  .pile.pop{animation:pilePop .8s ease}
+  @keyframes pilePop{0%{transform:scale(1)}30%{transform:scale(1.045)}60%{transform:scale(.99)}100%{transform:scale(1)}}
+  .pile .count-badge.jump{animation:badgeJump .8s ease}
+  @keyframes badgeJump{0%{transform:scale(1)}35%{transform:scale(1.45) rotate(-4deg)}70%{transform:scale(1.1)}100%{transform:scale(1)}}
+  #scoreChip.pulse{animation:scorePulse .9s ease}
+  @keyframes scorePulse{0%{transform:scale(1)}30%{transform:scale(1.14);box-shadow:0 0 0 4px rgba(245,165,36,.55)}100%{transform:scale(1)}}
+  @media (prefers-reduced-motion: reduce){
+    #endBanner.show{animation:none}
+    #pairOverlay.show{animation:pairOverlayFade 2.3s ease both}
+    @keyframes pairOverlayFade{0%{opacity:0}12%{opacity:1}78%{opacity:1}100%{opacity:0}}
+    .confetti-piece{animation:none;display:none}
+    .pile.pop,.pile .count-badge.jump,#scoreChip.pulse{animation:none}
+  }
 </style>
 </head>
 <body>
@@ -415,7 +462,7 @@
         <summary>How to play &amp; the 15 modifiers</summary>
         <p>On your turn, tap a fish card in your hand to ask for that card's <b>exact mate — same number AND same color</b>. Tapping your 9♣ asks for the 9♠, the other black 9; tapping 9♥ asks for the 9♦, the other red 9. If they hold that one card, they hand over <b>just that card</b> — never every card of that number — and you ask again. If they don't have that exact card — <b>Go Fish!</b> — your pole casts into the whirlpool and hauls up 1 card. Fish your exact mate or pair up, and you go again. Starting pairs bank themselves, and most pairs when no more can be made wins.</p>
         <ul id="modListHow"></ul>
-        <p>Shields: <b>Anchor</b> ⚓ blocks the next Blind Snatch, Rip Current, or Magnet Hook. <b>Life Ring</b> 🛡️ blocks the next Blind Snatch, Rip Current, or Storm Surge. One modifier per turn.</p>
+        <p>Two different shields, two different jobs: <b>Anchor</b> ⚓ is anti-theft — it blocks the next Blind Snatch, Rip Current, or <b>Magnet Hook</b> aimed at you, but not Storm Surge. <b>Life Ring</b> 🛡️ is anti-disruption — it blocks the next Blind Snatch, Rip Current, or <b>Storm Surge</b>, but not Magnet Hook. One modifier per turn.</p>
       </details>
     </div>
   </div>
@@ -444,9 +491,23 @@
         <button data-preset="angled">Angled</button>
         <button data-preset="low">Low</button>
       </div>
+      <div id="confettiLayer" aria-hidden="true"></div>
+      <div id="pairOverlay" aria-live="polite"><div class="pair-overlay-inner"><div class="pair-overlay-title">PAIR!</div><div class="pair-overlay-sub" id="pairOverlaySub"></div><div class="pair-overlay-who" id="pairOverlayWho"></div><div class="pair-sparkles" aria-hidden="true">✨ ⭐ ✨</div></div></div>
     </div>
 
     <div class="banner" id="eventBanner" style="display:none"></div>
+
+    <div id="endBanner" role="alert">
+      <div id="endBannerEmoji" aria-hidden="true">🏆</div>
+      <div id="endBannerTitle">Game over</div>
+      <div id="endBannerScore"></div>
+      <div id="endBannerReason"></div>
+      <div class="row">
+        <button class="btn btn-primary" id="endBannerRematch" type="button">Rematch</button>
+        <button class="btn" id="endBannerLeave" type="button">Back to Lobby</button>
+      </div>
+      <div id="endBannerNote"></div>
+    </div>
 
     <div id="waitPanel">
       <div style="font-size:15px;font-weight:700" id="waitText">Joining your friend's room…</div>
@@ -469,6 +530,7 @@
       <div id="layRow" style="margin-top:10px;display:none">
         <button class="btn btn-primary" id="layBtn">Lay down your pair into your pile</button>
       </div>
+      <div id="modPanel"></div>
     </div>
 
     <div class="below">
@@ -476,20 +538,9 @@
       <div class="pile" id="oppPile"></div>
     </div>
 
-    <div id="modStrip">
-      <div class="mod-strip-head"><span>⭐ <b>Modifiers</b> <span class="dim">— tap one to see what it does</span></span><span class="mod-sel-pill" id="modSelPill" style="display:none"></span></div>
-      <div class="mod-strip-row" id="modStripRow"></div>
-      <div id="modStripDesc" style="display:none;margin-top:8px;font-size:13.5px;line-height:1.45"></div>
-    </div>
-
-    <div class="board-bar"><span>🃏 <b>Pairs board</b>&nbsp; <span class="sum" id="boardSum"></span></span><button class="link-btn" id="boardToggle" type="button">Show</button></div>
-    <div id="pairsBoardPanel" style="display:none"><div class="pb-grid" id="pbGrid"></div><div class="pb-legend">Gold = your pair · Green = opponent's pair · each cell is one rank in red or black — 26 pairs total.</div></div>
-
-    <div id="testBar"><div class="tb-head">🧪 TEST MODE — force-grant a modifier to your hand</div><div class="tb-row" id="testRow"></div></div>
-
     <div id="intelBar"><h3>What you've learned</h3><div id="intelLines"></div></div>
 
-    <div id="modPanel"></div>
+    <div id="testBar"><div class="tb-head">🧪 TEST MODE — force-grant a modifier to your hand</div><div class="tb-row" id="testRow"></div></div>
 
     <div id="endPanel">
       <h2 id="endTitle">Game over</h2>
@@ -500,6 +551,9 @@
       </div>
       <p id="rematchNote" style="font-size:13px;margin-top:8px"></p>
     </div>
+
+    <div class="board-bar"><span>🃏 <b>Pairs board</b>&nbsp; <span class="sum" id="boardSum"></span></span><button class="link-btn" id="boardToggle" type="button">Show</button></div>
+    <div id="pairsBoardPanel" style="display:none"><div class="pb-grid" id="pbGrid"></div><div class="pb-legend">Gold = your pair · Green = opponent's pair · each cell is one rank in red or black — 26 pairs total.</div></div>
 
     <div class="log-toggle-row"><button class="link-btn" id="logToggle" type="button">Hide move log</button></div>
     <div class="log-panel" id="logPanel"><h3>Pond log</h3><ul id="logList"></ul></div>
@@ -644,21 +698,21 @@ function askPhrase(card){ return "Do you have the " + askTargetLabel(card) + "?"
 
 var MODIFIERS = ["snatch","swap","peek","double","rip","sonar","magnet","monster","chum","anchor","trade","sense","shield","scope","storm"];
 var MODIFIER_INFO = {
-  snatch:{ name:"Blind Snatch", icon:"🎣", blurb:"Steal one random card from their hand — sight unseen." },
-  swap:{ name:"Swap Bait", icon:"🪱", blurb:"Toss one of your cards back into the pond and draw a fresh one." },
-  peek:{ name:"Peek", icon:"🔭", blurb:"Secretly glimpse up to 3 cards in their hand. They'll never know which." },
-  double:{ name:"Double Cast", icon:"✌️", blurb:"Cast twice — draw 2 cards from the pond." },
-  rip:{ name:"Rip Current", icon:"🌀", blurb:"A random card is ripped from their hand into the pond — then you draw 1." },
-  sonar:{ name:"Sonar Ping", icon:"📡", blurb:"Ping one of your cards — learn whether they hold its exact mate (same number + same color). No faces shown." },
-  magnet:{ name:"Magnet Hook", icon:"🧲", blurb:"Arm it, then tap one of your cards: the hook hunts that card's exact mate in their hand. Pairs on a hit, spent on a miss." },
-  monster:{ name:"Pond Monster", icon:"🐉", blurb:"A fish monster leaps out and eats one of YOUR cards — then you fish 2 back. It might eat your pair-half, but two fresh cards can pair." },
-  chum:{ name:"Chum Bucket", icon:"🪣", blurb:"Draw 3 cards — but the smell draws 1 for them too." },
-  anchor:{ name:"Anchor", icon:"⚓", blurb:"Drop anchor: the next Snatch, Rip, or Magnet aimed at you fizzles." },
-  trade:{ name:"Fair Trade", icon:"🤝", blurb:"Swap one random card with one of theirs, sight unseen — either of you might land a pair." },
-  sense:{ name:"Mate Sense", icon:"🎯", blurb:"Your line thrums: learn exactly which of your cards have their exact mate (same number + same color) sitting in their hand right now." },
-  shield:{ name:"Life Ring", icon:"🛡️", blurb:"Raise a shield that blocks the next Blind Snatch, Rip Current or Storm Surge aimed at you. Stays up until it blocks one." },
-  scope:{ name:"Deep Scope", icon:"🔍", blurb:"Look at the top 3 cards of the pond and keep the best one — a mate for your hand if it's there." },
-  storm:{ name:"Storm Surge", icon:"⚡", blurb:"Lightning scatters 2 random cards from their hand into the pond. They fish 1 back. You draw nothing." }
+  snatch:{ name:"Blind Snatch", icon:"🎣", blurb:"STEAL: Grab 1 random card out of their hand and keep it — you don't choose it and you don't see it first. If it's the mate of a card you hold, it pairs on the spot. Pure theft, zero information." },
+  swap:{ name:"Swap Bait", icon:"🪱", blurb:"RECYCLE: Choose 1 dead card from your own hand, toss it back into the pond, and draw 1 fresh card. Use it to dump a card whose mate is already banked or gone — a 1-for-1 hand fix, nothing more." },
+  peek:{ name:"Peek", icon:"🔭", blurb:"SPY ON THEIR HAND: Secretly see the faces of up to 3 random cards in THEIR hand — the actual ranks and suits, so you can plan future asks and dodge wasted turns. It reveals their cards; it tells you nothing about the pond. They never learn which cards you saw." },
+  double:{ name:"Double Cast", icon:"✌️", blurb:"SAFE DRAW: Draw 2 cards from the pond, no strings attached — nobody else draws and nothing of yours is risked. The reliable way to grow your hand and hunt for mates." },
+  rip:{ name:"Rip Current", icon:"🌀", blurb:"DISRUPT + DRAW: A random card is torn out of THEIR hand and thrown back into the pond (they lose it, you do NOT keep it) — then you draw 1 from the pond. Hurts them and feeds you in the same play." },
+  sonar:{ name:"Sonar Ping", icon:"📡", blurb:"ONE-CARD CHECK: Pick ONE card in your hand and learn a single yes-or-no answer — do they hold that card's exact mate (same number + same color) right now? Nothing else is revealed: no other cards, no faces. Precise, narrow, certain." },
+  magnet:{ name:"Magnet Hook", icon:"🧲", blurb:"TARGETED STEAL: Arm it, then tap one of YOUR cards — the hook flies straight to that card's exact mate in their hand and rips it out, pairing instantly. If that mate isn't there, the hook comes up empty and the card is spent. Use Sonar or Mate Sense first so you don't waste it." },
+  monster:{ name:"Pond Monster", icon:"🐉", blurb:"GAMBLE ON YOURSELF: The monster leaps out and eats 1 random card from YOUR hand (it goes back to the pond) — then you fish 2 fresh cards. You trade one card you own for two chances at a pair. Risky when you're holding a pair-half; great when your hand is dead weight." },
+  chum:{ name:"Chum Bucket", icon:"🪣", blurb:"BIG DRAW, SHARED SMELL: Draw 3 cards from the pond — the biggest haul in the game — but the chum also lets THEM draw 1. Take it when three fresh chances for you outweigh one free card for them." },
+  anchor:{ name:"Anchor", icon:"⚓", blurb:"ANTI-THEFT SHIELD: Blocks the next TARGETED steal aimed at you — Blind Snatch, Rip Current, or Magnet Hook — and that attacker's card is wasted. Stays down until it blocks one. It does NOT stop Storm Surge." },
+  trade:{ name:"Fair Trade", icon:"🤝", blurb:"BLIND SWAP: You and they each give up 1 random card and take the other's — neither of you chooses or sees it first. A coin-flip reset: it can hand you a pair, hand THEM a pair, or just shake a stale hand loose." },
+  sense:{ name:"Mate Sense", icon:"🎯", blurb:"FULL-HAND SCAN: Learn, for EVERY card in your hand at once, which ones have their exact mate (same number + same color) sitting in their hand right now — the matching mates are listed for you. Wider than Sonar Ping (which checks one card), but it only flags mates — it never shows their other cards." },
+  shield:{ name:"Life Ring", icon:"🛡️", blurb:"ANTI-DISRUPTION SHIELD: Blocks the next AREA attack aimed at you — Blind Snatch, Rip Current, or Storm Surge — and that attacker's card is wasted. Stays up until it blocks one. It does NOT stop a targeted Magnet Hook — that's what Anchor is for." },
+  scope:{ name:"Deep Scope", icon:"🔍", blurb:"SPY ON THE POND: Look at the top 3 FISH cards of the POND (never their hand) and automatically keep the best one — a mate for your hand if one is there, otherwise the first card. Information plus a card: you see all three faces, even the two you leave behind." },
+  storm:{ name:"Storm Surge", icon:"⚡", blurb:"PURE DISRUPTION: Lightning scatters 2 random cards out of THEIR hand back into the pond. They fish 1 card back; you draw NOTHING. You gain no card and no information — you play it only to wreck their hand and break up mates they're holding." }
 };
 var MODIFIER_ART = {
   snatch:{ bg:"linear-gradient(160deg,#3b2d5c,#6d4fa1)", edge:"#2a1f45", ink:"#f3edff" },
@@ -1085,7 +1139,9 @@ var els = {};
  "rematchBtn","endLeaveBtn","rematchNote","logList","toast","modListHow",
  "hostPanel","hostCode","hostHint","hostStatus","hostRetryBtn","copyCodeBtn","cancelHostBtn",
  "joinCodeInput","joinBtn","waitCode","waitText","waitStatus","waitError","retryWaitBtn",
- "scoreChip","installBtn","liveNotice","modStripRow","modSelPill","modStripDesc","boardSum","pbGrid","pairsBoardPanel","boardToggle","testBar","testRow","logToggle","logPanel"].forEach(function(id){ els[id]=$(id); });
+ "scoreChip","installBtn","liveNotice","boardSum","pbGrid","pairsBoardPanel","boardToggle","testBar","testRow","logToggle","logPanel",
+ "endBanner","endBannerEmoji","endBannerTitle","endBannerScore","endBannerReason","endBannerNote","endBannerRematch","endBannerLeave",
+ "pairOverlay","pairOverlaySub","pairOverlayWho","confettiLayer","sceneWrap"].forEach(function(id){ els[id]=$(id); });
 
 var mode=null;            // 'solo' | 'host' | 'guest'
 var S=null;               // engine state (solo + host only)
@@ -1100,6 +1156,9 @@ var armed=null;           // { mod } waiting for a fish-card tap
 var lastSeqSeen=0;
 var wasMyTurn=false;
 var finishedSoundPlayed=false;
+var celebratedSeq=0;
+var prevPairCounts=null;
+var pairOverlayTimer=null;
 var pc=null, dc=null, roomCode="", hostStatus="waiting", disconnected=false;
 
 var KIND_TO_MOD = { snatch:"snatch", swap:"swap", peek:"peek", double:"double", rip:"rip", sonar:"sonar", magnet:"magnet", monster:"monster", chum:"chum", anchor:"anchor", trade:"trade", sense:"sense", shield:"shield", scope:"scope", storm:"storm" };
@@ -1145,7 +1204,8 @@ function bubblesFor(ev,v){
       break;
     case "blocked": set(ev.actor, "Blocked! 🛡️"); break;
     default:
-      if(KIND_TO_MOD[ev.kind]){ var inf=MODIFIER_INFO[KIND_TO_MOD[ev.kind]]; set(ev.actor, inf.icon+" "+inf.name+"!"); }
+      if(ev.pairId){ set(ev.actor, "Pair — "+pairLabel(ev.pairId)+"! 🎉"); }
+      else if(KIND_TO_MOD[ev.kind]){ var inf=MODIFIER_INFO[KIND_TO_MOD[ev.kind]]; set(ev.actor, inf.icon+" "+inf.name+"!"); }
       break;
   }
   return out;
@@ -1154,6 +1214,129 @@ function showBubble(el,b){
   if(!b){ el.style.display="none"; return; }
   el.innerHTML = '<span class="who">'+esc(b.name)+"</span>"+esc(b.text);
   el.style.display="block";
+}
+/* ---- Clarity helpers: banner results, pair celebration, end banner ---- */
+function cardFace(c){ return c.rank + SUIT_GLYPH[c.suit]; }
+function privateIntelLine(v){
+  /* YOUR intel results, in plain words for the yellow banner. This is built
+     only from your own filtered view, so it never leaks to the opponent. */
+  var ev=v.lastEvent; if(!ev || ev.actor!=="you") return "";
+  var oppName=v.opponent?v.opponent.name:"They";
+  if(ev.kind==="sonar" && v.you.sonar && v.you.sonar.mate){
+    return v.you.sonar.count>0
+      ? "📡 Sonar result: YES — "+oppName+" DOES hold the "+v.you.sonar.mate+" — the exact mate you pinged for. Tap your card and ask for it!"
+      : "📡 Sonar result: NO — "+oppName+" does NOT hold the "+v.you.sonar.mate+" — the exact mate you pinged for. Don't waste an ask on it.";
+  }
+  if(ev.kind==="sense" && v.you.sense){
+    return v.you.sense.length
+      ? "🎯 Mate Sense result: "+oppName+" holds your mate"+(v.you.sense.length===1?"":"s")+": "+v.you.sense.map(cardFace).join(", ")+" — tap your matching card to ask for that exact mate!"
+      : "🎯 Mate Sense result: NONE of your mates are in "+oppName+"'s hand right now — go fish or draw instead of asking.";
+  }
+  if(ev.kind==="peek" && v.you.peeked && v.you.peeked.length){
+    return "🔭 Peek result: you secretly saw "+v.you.peeked.map(cardFace).join(", ")+" in "+oppName+"'s hand.";
+  }
+  if(ev.kind==="scope" && v.you.scoped && v.you.scoped.length){
+    return "🔍 Deep Scope result: the pond's top cards were "+v.you.scoped.map(cardFace).join(", ")+" — you kept the best one.";
+  }
+  if(ev.kind==="anchor") return "⚓ Anchor result: your Anchor is DOWN — the next Blind Snatch, Rip Current, or Magnet Hook aimed at you will fizzle.";
+  if(ev.kind==="shield") return "🛡️ Life Ring result: your Life Ring is UP — the next Blind Snatch, Rip Current, or Storm Surge aimed at you will fizzle.";
+  return "";
+}
+function celebratePair(v, ev){
+  var pid = ev && ev.pairId ? ev.pairId : null;
+  var yours = ev ? ev.actor==="you" : true;
+  if(!pid){
+    var arr = yours ? v.you.pairs : (v.opponent?v.opponent.pairs:[]);
+    pid = arr[arr.length-1];
+  }
+  if(!pid) return;
+  var label = pairLabel(pid);
+  var whoName = yours ? v.you.name : (v.opponent?v.opponent.name:"Opponent");
+  /* Big overlay over the pond */
+  if(els.pairOverlay){
+    els.pairOverlaySub.textContent = label;
+    els.pairOverlayWho.textContent = (yours ? "You banked a pair!" : whoName+" banked a pair");
+    els.pairOverlay.classList.remove("show");
+    void els.pairOverlay.offsetWidth;
+    els.pairOverlay.classList.add("show");
+    clearTimeout(pairOverlayTimer);
+    pairOverlayTimer=setTimeout(function(){ els.pairOverlay.classList.remove("show"); }, 2400);
+  }
+  /* Pile pop + badge jump + score pulse */
+  var pileEl = yours ? els.youPile : els.oppPile;
+  if(pileEl){
+    pileEl.classList.remove("pop"); void pileEl.offsetWidth; pileEl.classList.add("pop");
+    var badge=pileEl.querySelector(".count-badge");
+    if(badge){ badge.classList.remove("jump"); void badge.offsetWidth; badge.classList.add("jump"); }
+  }
+  if(els.scoreChip){ els.scoreChip.classList.remove("pulse"); void els.scoreChip.offsetWidth; els.scoreChip.classList.add("pulse"); }
+  /* Two cards visibly fly from the hand area into that player's pair pile */
+  try{
+    if(pileEl && els.handRow && !window.matchMedia("(prefers-reduced-motion: reduce)").matches){
+      var from=els.handRow.getBoundingClientRect(), to=pileEl.getBoundingClientRect();
+      var rank=pairRankFromId(pid), col=pairColorFromId(pid);
+      var glyphs = col==="red" ? ["♥","♦"] : ["♣","♠"];
+      for(var i=0;i<2;i++){
+        (function(i){
+          var d=document.createElement("div");
+          d.className="fly-card"+(col==="red"?" red":"");
+          d.textContent=rank+glyphs[i];
+          d.style.left=(from.left+from.width/2-22+i*16)+"px";
+          d.style.top=(from.top+6)+"px";
+          document.body.appendChild(d);
+          var dx=(to.left+to.width/2)-(from.left+from.width/2)-i*16;
+          var dy=(to.top+to.height/2)-(from.top+6);
+          var anim=d.animate([
+            { transform:"translate(0,0) rotate(0deg)", opacity:1 },
+            { transform:"translate("+(dx*0.5)+"px,"+(dy*0.5-110)+"px) rotate("+(i?-14:14)+"deg)", opacity:1, offset:0.55 },
+            { transform:"translate("+dx+"px,"+dy+"px) rotate(0deg) scale(.72)", opacity:0.9 }
+          ], { duration:950, delay:i*130, easing:"cubic-bezier(.3,.6,.4,1)", fill:"forwards" });
+          anim.onfinish=function(){ d.remove(); };
+          setTimeout(function(){ if(d.parentNode) d.remove(); }, 1600);
+        })(i);
+      }
+    }
+  }catch(e){}
+}
+function spawnConfetti(){
+  if(!els.confettiLayer) return;
+  els.confettiLayer.innerHTML="";
+  if(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  var colors=["#f5a524","#1d9e7a","#c23325","#2e7d9e","#fdf8ec","#ad3a68"];
+  for(var i=0;i<44;i++){
+    var p=document.createElement("span");
+    p.className="confetti-piece";
+    p.style.left=(Math.random()*100)+"%";
+    p.style.background=colors[i%colors.length];
+    p.style.animationDuration=(1.6+Math.random()*1.6)+"s";
+    p.style.animationDelay=(Math.random()*0.7)+"s";
+    p.style.transform="rotate("+(Math.random()*360)+"deg)";
+    els.confettiLayer.appendChild(p);
+  }
+  setTimeout(function(){ if(els.confettiLayer) els.confettiLayer.innerHTML=""; }, 4200);
+}
+function renderEndBanner(v){
+  if(!els.endBanner) return;
+  var opp=v.opponent;
+  if(v.phase!=="finished"){
+    els.endBanner.classList.remove("show","win","lose","tie");
+    els.endBanner.style.display="none";
+    return;
+  }
+  var youPairs=v.you.pairs.length, oppPairs=opp?opp.pairs.length:0;
+  var winnerName = v.winner==="you" ? v.you.name : v.winner==="tie" ? null : (opp?opp.name:"Opponent");
+  els.endBanner.style.display="block";
+  els.endBanner.classList.add("show");
+  els.endBanner.classList.toggle("lose", v.winner==="opponent");
+  els.endBanner.classList.toggle("tie", v.winner==="tie");
+  els.endBannerEmoji.textContent = v.winner==="you" ? "🎉🏆🎉" : v.winner==="tie" ? "🤝" : "👎";
+  els.endBannerTitle.textContent = v.winner==="you" ? "YOU WIN!" : v.winner==="tie" ? "It's a tie!" : "Ouch — "+winnerName+" wins";
+  els.endBannerScore.textContent = "Final score — "+v.you.name+" "+youPairs+" · "+(opp?opp.name:"Opponent")+" "+oppPairs+" pairs";
+  els.endBannerReason.textContent = v.winner==="opponent" ? "Ouch 👎 — "+winnerName+" took this one. Rematch?" : (v.endReason||"");
+  /* Mirror the bottom panel's rematch state so both stay in sync */
+  if(mode==="solo"){ els.endBannerRematch.disabled=false; els.endBannerRematch.textContent="Rematch"; els.endBannerNote.textContent=""; }
+  else if(v.rematch && v.rematch.you){ els.endBannerRematch.disabled=true; els.endBannerRematch.textContent="Waiting for "+(opp?opp.name:"opponent")+"…"; els.endBannerNote.textContent="You want a rematch — the new game starts when they tap Rematch too."; }
+  else { els.endBannerRematch.disabled=false; els.endBannerRematch.textContent="Rematch"; els.endBannerNote.textContent = (v.rematch && v.rematch.opponent) ? (opp?opp.name:"Opponent")+" wants a rematch!" : ""; }
 }
 function render(){
   var v=view; if(!v) return;
@@ -1176,8 +1359,21 @@ function render(){
     var onlineDot = mode==="solo" ? "" : '<span class="dot'+(opp.online?"":" off")+'"></span>';
     els.oppChip.innerHTML = '<span class="opp-avatar">'+esc(initial)+onlineDot+'</span><span class="opp-meta"><b>'+esc(opp.name)+"</b><br/>"+opp.cardCount+" cards · "+opp.pairs.length+" pairs · ⭐ "+opp.modifierCount+(shields?" · "+shields:"")+"</span>";
   }
-  els.eventBanner.textContent = v.lastEvent ? v.lastEvent.text : "";
-  els.eventBanner.style.display = v.lastEvent ? "block" : "none";
+  /* Yellow event banner: the event itself PLUS, in plain words, any modifier
+     result and any intel you just learned — right when it happens. */
+  (function(){
+    var ev0=v.lastEvent;
+    if(!ev0){ els.eventBanner.style.display="none"; els.eventBanner.innerHTML=""; return; }
+    var isMod = !!(KIND_TO_MOD[ev0.kind] || ev0.kind==="blocked" || ev0.kind==="anchor" || ev0.kind==="shield");
+    var intel = privateIntelLine(v);
+    /* Standing shields you hold also read out in the banner while they matter */
+    var html0='<span class="banner-main">'+esc(ev0.text)+"</span>";
+    if(ev0.kind==="blocked") html0+='<span class="mod-result">🛡️ Result: BLOCKED — that modifier didn\'t work. The shield is spent, and the modifier card is gone.</span>';
+    if(intel) html0+='<span class="mod-result">'+esc(intel)+"</span>";
+    els.eventBanner.innerHTML=html0;
+    els.eventBanner.classList.toggle("is-mod", isMod);
+    els.eventBanner.style.display="block";
+  })();
   /* bubbles */
   if(thinking){
     els.thinkWho.textContent = opp ? opp.name : "Computer";
@@ -1255,8 +1451,9 @@ function render(){
     if(mode==="solo"){ els.rematchBtn.disabled=false; els.rematchBtn.textContent="Rematch"; els.rematchNote.textContent=""; }
     else if(v.rematch.you){ els.rematchBtn.disabled=true; els.rematchBtn.textContent="Waiting for "+(opp?opp.name:"opponent")+"…"; els.rematchNote.textContent="You want a rematch — the new game starts when they tap Rematch too."; }
     else { els.rematchBtn.disabled=false; els.rematchBtn.textContent="Rematch"; els.rematchNote.textContent = v.rematch.opponent ? (opp?opp.name:"Opponent")+" wants a rematch!" : ""; }
-    if(!finishedSoundPlayed){ finishedSoundPlayed=true; if(v.winner==="you") Sound.win(); else if(v.winner==="opponent") Sound.lose(); }
+    if(!finishedSoundPlayed){ finishedSoundPlayed=true; if(v.winner==="you"){ Sound.win(); spawnConfetti(); } else if(v.winner==="opponent") Sound.lose(); }
   } else { els.endPanel.style.display="none"; finishedSoundPlayed=false; }
+  renderEndBanner(v);
   /* log */
   els.logList.innerHTML = v.log.map(function(e){ return '<li class="'+e.tone+'">'+esc(e.text)+"</li>"; }).join("");
   els.logList.scrollTop = els.logList.scrollHeight;
@@ -1268,23 +1465,36 @@ function render(){
     if(!first){
       Sound.event(ev.kind, ev.drew);
       if(window.SceneFX) SceneFX.trigger(ev, v);
+      /* Automatic pairs are a big visual moment, not just a banner line —
+         any event carrying a banked pair (ask hit, drawn mate, lay-down,
+         or a modifier haul like Snatch / Magnet / Scope / Chum) celebrates. */
+      if(ev.pairId && ev.seq!==celebratedSeq){ celebratedSeq=ev.seq; celebratePair(v, ev); }
+    } else {
+      if(ev.pairId) celebratedSeq=ev.seq;
+      if(ev.kind==="start"){
+        if(v.you.pairs.length) celebratePair(v, { actor:"you", pairId:v.you.pairs[v.you.pairs.length-1] });
+        else if(v.opponent && v.opponent.pairs.length) celebratePair(v, { actor:"opponent", pairId:v.opponent.pairs[v.opponent.pairs.length-1] });
+      }
     }
   }
+  /* Starting pairs banked on the deal: pair counts jumping on a fresh game
+     (start event) get the same celebration for the newest banked pair. */
+  (function(){
+    var counts={ you:v.you.pairs.length, opp:v.opponent?v.opponent.pairs.length:0 };
+    if(prevPairCounts && ev && ev.kind==="start"){
+      if(counts.you>prevPairCounts.you) celebratePair(v, { actor:"you", pairId:v.you.pairs[v.you.pairs.length-1] });
+      else if(counts.opp>prevPairCounts.opp) celebratePair(v, { actor:"opponent", pairId:v.opponent.pairs[v.opponent.pairs.length-1] });
+    }
+    prevPairCounts=counts;
+  })();
   if(v.yourTurn && !wasMyTurn && v.phase==="playing" && mode!=="solo") Sound.turn();
   wasMyTurn=v.yourTurn;
   if(window.SceneFX) SceneFX.setTurn(v.yourTurn);
 }
 var testMode=false;
 function renderExtras(v){
-  if(els.modStripRow){
-    if(!v.you.modifiers.length){ els.modStripRow.innerHTML='<span class="mod-strip-empty">No modifier cards in hand — any haul from the pond can bring one.</span>'; }
-    else {
-      els.modStripRow.innerHTML = v.you.modifiers.map(function(m){ var inf=MODIFIER_INFO[m]; return '<button class="mod-pill'+(selectedMod===m?" selected":"")+'" data-stripmod="'+m+'">'+inf.icon+" "+esc(inf.name)+"</button>"; }).join("");
-      Array.prototype.forEach.call(els.modStripRow.querySelectorAll("[data-stripmod]"), function(b){ b.addEventListener("click", function(){ onModTap(b.getAttribute("data-stripmod")); }); });
-    }
-    if(selectedMod && MODIFIER_INFO[selectedMod]){ var si=MODIFIER_INFO[selectedMod]; els.modSelPill.style.display="inline-block"; els.modSelPill.textContent=si.icon+" "+si.name; els.modStripDesc.style.display="block"; els.modStripDesc.textContent=si.icon+" "+si.name+" — "+si.blurb; }
-    else { els.modSelPill.style.display="none"; els.modStripDesc.style.display="none"; }
-  }
+  /* Modifiers live in ONE place only: the mod card in your hand, which opens
+     the single detail card inside the hand panel. No strip, no pill row. */
   if(els.pbGrid){
     var html2="";
     RANKS.forEach(function(r){ ["red","black"].forEach(function(col){
@@ -1335,6 +1545,11 @@ function onModTap(m){
   selectedMod = selectedMod===m ? null : m;
   armed=null;
   render();
+  /* The detail card sits inside the hand panel, right under your cards —
+     bring it into view immediately so Play is never a scroll-hunt. */
+  if(selectedMod && els.modPanel){
+    try{ els.modPanel.scrollIntoView({ block:"nearest", behavior:"smooth" }); }catch(e){ els.modPanel.scrollIntoView(); }
+  }
 }
 function doAsk(card){
   if(mode==="guest"||mode==="host"){ sendToHost({ t:"ask", card:card.id }); return; }
@@ -1402,7 +1617,10 @@ els.muteBtn.addEventListener("click", function(){
 });
 function leaveGame(){
   teardownRTC();
-  mode=null; S=null; view=null; busy=false; thinking=false; selectedMod=null; armed=null; disconnected=false; hostStatus="waiting"; roomCode=""; lastSeqSeen=0;
+  mode=null; S=null; view=null; busy=false; thinking=false; selectedMod=null; armed=null; disconnected=false; hostStatus="waiting"; roomCode=""; lastSeqSeen=0; celebratedSeq=0; prevPairCounts=null;
+  if(els.endBanner){ els.endBanner.classList.remove("show"); els.endBanner.style.display="none"; }
+  if(els.confettiLayer) els.confettiLayer.innerHTML="";
+  if(els.pairOverlay) els.pairOverlay.classList.remove("show");
   if(typeof joinAttempt!=="undefined") joinAttempt=0;
   if(els.waitError){ els.waitError.textContent=""; els.waitError.style.display="none"; }
   if(els.retryWaitBtn) els.retryWaitBtn.style.display="none";
@@ -1413,6 +1631,8 @@ function leaveGame(){
 }
 els.leaveBtn.addEventListener("click", leaveGame);
 els.endLeaveBtn.addEventListener("click", leaveGame);
+if(els.endBannerLeave) els.endBannerLeave.addEventListener("click", leaveGame);
+if(els.endBannerRematch) els.endBannerRematch.addEventListener("click", function(){ els.rematchBtn.click(); });
 els.cancelWaitBtn.addEventListener("click", leaveGame);
 function startScreen(){
   els.lobby.style.display="none"; els.game.style.display="block";

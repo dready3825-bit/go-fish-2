@@ -1446,7 +1446,7 @@ function startScreen(){
    Leave it empty and live rooms stay in their honest not-connected-yet
    state (the lobby says so, Create/Join explain instead of hanging)
    while solo vs Computer works fully, offline. */
-var LIVE_WORKER_URL = "";
+var LIVE_WORKER_URL = "wss://go-fish-rooms.dready3825.workers.dev";
 
 var ws=null, conn=null, connOpen=false, wsIntentionalClose=false;
 var joinAttempt=0, joinInFlight=false, viewTimer=null, reconnectTimer=null, connectTimer=null, reconnectAttempt=0;

@@ -247,10 +247,18 @@
      the hand cards down or off the first screen. */
   #modPanel{
     display:none;position:absolute;left:12px;right:12px;bottom:calc(100% + 8px);z-index:40;
+    flex-direction:column;
     margin:0;border-radius:var(--radius);padding:12px 14px;color:#fff;
     box-shadow:0 18px 44px rgba(0,0,0,.5),0 4px 14px rgba(0,0,0,.35);border:1px solid rgba(0,0,0,.35);
-    max-height:min(52vh,360px);overflow-y:auto;
+    /* Hard cap: never more than about a third of the viewport tall, so
+       the open panel floats over the scene/banner area only and can
+       never reach down to cover the hand row. The description scrolls
+       inside the cap (.mod-body); the Play / Close row is pinned
+       below it and always stays visible. */
+    max-height:min(33vh,330px);max-height:min(33dvh,330px);
   }
+  #modPanel .mod-body{overflow-y:auto;min-height:0}
+  #modPanel .row{flex:none}
   #modPanel h3{margin:0 0 4px;font-size:18px;font-family:Georgia,serif}
   #modPanel p{margin:0 0 10px;font-size:14px;line-height:1.45;opacity:.94}
   #modPanel .row{display:flex;gap:8px;flex-wrap:wrap}
@@ -456,7 +464,7 @@
     .modcard{padding:4px 3px}
     .modcard .ic{font-size:20px}
     .modcard .nm{font-size:8px}
-    #modPanel{left:6px;right:6px;bottom:calc(100% + 6px);margin:0;padding:9px 11px;max-height:54dvh}
+    #modPanel{left:6px;right:6px;bottom:calc(100% + 6px);margin:0;padding:9px 11px;max-height:33vh;max-height:33dvh}
     #modPanel h3{font-size:16px;margin-bottom:2px}
     #modPanel p{font-size:12.5px;line-height:1.35;margin-bottom:6px}
     #modPanel .btn{padding:8px 12px;font-size:14px}
@@ -1909,9 +1917,9 @@ function renderModPanel(v){
     needs = copied ? MOD_NEEDS_TARGET[v.oppLastMod] : (v.you.hand.length ? "card" : null);
   }
   var canPlay = v.yourTurn && v.phase==="playing" && !v.modUsedThisTurn && !v.you.frozen && !busy && !thinking && !(selectedMod==="mirror" && !v.oppLastMod);
-  els.modPanel.style.display="block";
+  els.modPanel.style.display="flex";
   els.modPanel.style.background=art.bg; els.modPanel.style.color=art.ink;
-  els.modPanel.innerHTML = "<h3>"+inf.icon+" "+esc(inf.name)+'</h3><p>'+esc(blurb)+"</p><p style='font-size:12.5px;opacity:.85;margin:-4px 0 10px'>Playing a modifier uses your whole turn — you don't ask after it. You can hold at most 3 mods.</p>"
+  els.modPanel.innerHTML = '<div class="mod-body">'+"<h3>"+inf.icon+" "+esc(inf.name)+'</h3><p>'+esc(blurb)+"</p><p style='font-size:12.5px;opacity:.85;margin:-4px 0 10px'>Playing a modifier uses your whole turn — you don't ask after it. You can hold at most 3 mods.</p></div>"
     + '<div class="row">'
     + (canPlay
         ? '<button class="btn btn-play" id="modPlayBtn">'+(needs ? "Arm it — then tap a fish card" : "Play "+esc(inf.name))+"</button>"

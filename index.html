@@ -638,6 +638,7 @@
       <button class="btn btn-primary btn-block" id="soloBtn">🎣 Play vs the Computer</button>
       <button class="btn btn-block" id="installBtn" style="display:none">📲 How to install</button>
       <div id="liveNotice" role="status"></div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v17</div>
       <div class="divider">Play a friend live</div>
       <p style="font-size:13.5px;color:var(--ink-soft);margin:4px 2px 10px;line-height:1.55;text-align:left">Send your friend this app's link — https://dready3825-bit.github.io/go-fish-2/ — they can install it too. One of you taps <b>Create a room</b> and gets a short 6-letter code — tell your friend the code, they type it in below and tap <b>Join room</b>. That's it — no long codes to copy and paste.</p>
 
@@ -2028,9 +2029,17 @@ function fireDeferredFx(){
      deferral via clearStrip). */
   if(S && S!==d.S) return;
   if(!view) return;
-  Sound.event(d.ev.kind, d.ev.drew);
-  if(window.SceneFX) SceneFX.trigger(d.ev, d.v);
-  if(d.ev.pairId && d.ev.seq!==celebratedSeq){ celebratedSeq=d.ev.seq; celebratePair(d.v, d.ev); }
+  /* FX DELIVERY ISOLATION (Jenna, real play: "my Storm Surge shows
+     nothing at all"): the sound, the 3D animation and the pair
+     celebration fire as INDEPENDENT steps — a throw in any one of
+     them (an AudioContext hiccup on a real phone above all) must
+     never silently swallow the others. Before this, one uncaught
+     throw in Sound.event ate the SceneFX.trigger call behind it,
+     and the modifier's whole visual simply never happened while the
+     game played on. */
+  try{ Sound.event(d.ev.kind, d.ev.drew); }catch(e){}
+  try{ if(window.SceneFX) SceneFX.trigger(d.ev, d.v); }catch(e){}
+  if(d.ev.pairId && d.ev.seq!==celebratedSeq){ celebratedSeq=d.ev.seq; try{ celebratePair(d.v, d.ev); }catch(e){} }
   /* Release the lock this deferral set in EVERY turn state.
      releaseBusyWhenFxDone already branches: our turn -> wait out the FX
      that just started, then re-enable the hand; the CPU's turn -> clear
@@ -2066,9 +2075,11 @@ function fireShownFx(){
   if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false);
   if(S && S!==d.S) return;
   if(!view) return;
-  Sound.event(d.ev.kind, d.ev.drew);
-  if(window.SceneFX) SceneFX.trigger(d.ev, d.v);
-  if(d.ev.pairId && d.ev.seq!==celebratedSeq){ celebratedSeq=d.ev.seq; celebratePair(d.v, d.ev); }
+  /* FX DELIVERY ISOLATION: see fireDeferredFx — sound, scene and
+     celebration are independent steps; no one throw eats the rest. */
+  try{ Sound.event(d.ev.kind, d.ev.drew); }catch(e){}
+  try{ if(window.SceneFX) SceneFX.trigger(d.ev, d.v); }catch(e){}
+  if(d.ev.pairId && d.ev.seq!==celebratedSeq){ celebratedSeq=d.ev.seq; try{ celebratePair(d.v, d.ev); }catch(e){} }
   /* Same unconditional release as fireDeferredFx (see the long note
      there): a CPU event that RETAINS the CPU's turn — Whirlpool Spin
      above all — deadlocked here because the release was skipped on
@@ -2086,7 +2097,7 @@ function deferShownFxUntilStrip(ev, v){
   (function poll(){
     if(!deferredShownFx || deferredShownFx!==rec) return;
     if(S && S!==rec.S){ var stale=deferredShownFx; deferredShownFx=null; if(stale.timer) clearTimeout(stale.timer); if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false); return; }
-    if(stripEventShownFor(ev.seq) || (Date.now()-rec.startedAt)>6000){ fireShownFx(); return; }
+    if(stripEventShownFor(ev.seq) || (Date.now()-rec.startedAt)>3000){ fireShownFx(); return; } /* FAILSAFE TIGHTENED (was 6000ms): pushEventToStrip prunes superseded queued messages, so a healthy strip shows an event's first message in well under a second; 3s is the outer bound a stalled strip can delay a visual, never the normal path (350ms after the words show). */
     rec.timer=setTimeout(poll, 50); /* OVERHAUL VERIFY: 50ms poll (was 250ms) — a 250ms poll let the 350ms ANIM_DELAY slip to ~600ms; the animation now starts at 0.35s after the words, as specified */
   })();
 }
@@ -2211,6 +2222,16 @@ function privateIntelLine(v){
    found them doing. */
 function clearPairCelebration(){
   if(els.pairOverlay) els.pairOverlay.classList.remove("show");
+  /* ERASE THE WORDS, not just the visibility (Jenna, real play: the
+     new game still READ "PAIR! / 3s (black) / You banked a pair!" from
+     the finished game): every sweep before this only removed the
+     .show class and left the old pair's label sitting in the DOM, one
+     stray re-show away from reading as the new game's banner. The
+     sub/who lines are now blanked on every sweep, so a cleared
+     celebration can never display a previous game's pair again —
+     the next celebratePair writes fresh text before it shows. */
+  if(els.pairOverlaySub) els.pairOverlaySub.textContent="";
+  if(els.pairOverlayWho) els.pairOverlayWho.textContent="";
   if(pairOverlayTimer){ clearTimeout(pairOverlayTimer); pairOverlayTimer=null; }
   if(els.confettiLayer) els.confettiLayer.innerHTML="";
   /* REMATCH SWEEP (Jenna, real play: "a display card still persists
@@ -2539,12 +2560,13 @@ function render(){
         if(pushedN>0){
           deferShownFxUntilStrip(ev, v);
         } else {
-        Sound.event(ev.kind, ev.drew);
-        if(window.SceneFX) SceneFX.trigger(ev, v);
+        /* FX DELIVERY ISOLATION: see fireDeferredFx — independent steps. */
+        try{ Sound.event(ev.kind, ev.drew); }catch(e){}
+        try{ if(window.SceneFX) SceneFX.trigger(ev, v); }catch(e){}
         /* Automatic pairs are a big visual moment, not just a strip line —
            any event carrying a banked pair (ask hit, drawn mate, lay-down,
            or a modifier haul like Snatch / Magnet / Scope / Chum) celebrates. */
-        if(ev.pairId && ev.seq!==celebratedSeq){ celebratedSeq=ev.seq; celebratePair(v, ev); }
+        if(ev.pairId && ev.seq!==celebratedSeq){ celebratedSeq=ev.seq; try{ celebratePair(v, ev); }catch(e){} }
         }
       }
     } else {
@@ -3168,6 +3190,18 @@ function connectRoomSocket(role){
 els.soloBtn.addEventListener("click", function(){
   Sound.unlock();
   closeSocket();
+  /* NEW-GAME SWEEP (Jenna, real play: the finished game's PAIR!
+     banner read into the new solo game): starting a solo game gets
+     the SAME full sweep as a Rematch tap — pending deferred
+     presentations dropped, celebration banner + its TEXT cleared,
+     strip emptied, deal-pair celebration suppressed, scene reset —
+     instead of relying on leaveGame having run first (it resets the
+     seq counters, but the banner text and any deferred celebration
+     were only swept on the rematch path). celebratedSeq /
+     prevPairCounts reset here too, so the new deal's pairs can never
+     be measured against the finished game's counts. */
+  dropPendingPresentations();
+  celebratedSeq=0; prevPairCounts=null;
   mode="solo"; mySeat=0; names=[myName(),"Computer"]; roomCode="SOLO"; disconnected=false;
   S=emptyState(); dealGame(S,names); lastSeqSeen=0; busy=false; thinking=false; selectedMod=null; armed=null; cpuChain=0; cpuGateActive=false;
   startScreen(); refreshLocal();
@@ -3423,6 +3457,7 @@ var SceneFX = (function(){
   var stormT=0, endFired=false; // ITEM 4 (Shark Bite): the old fin cone's state is gone - the shark is a spawnProp now.
   var STORM_DUR=4.8; // FIX ROUND (Jenna, real play): the storm runs 4.8s (was 2.3s) — cloud, rain and all three long-hold bolt strikes live inside this one window; tick(), animBusy() and clearExpiredFx() all read it.
   var fxProps=[], boltMesh=null, boltT=9, boltAt=null;
+  var baitDangleGen=0; /* BAIT SINGLE-INSTANCE, generation guard: bumped by every clearBaitDangle()/clearOneShotFx(). A dangle prop whose spawn was DEFERRED by the spawnProp backlog is not in fxProps yet, so the sweep cannot see it — the generation is how a superseded dangle recognises itself the moment its fn first runs and removes itself instead of becoming the second copy Jenna saw. */
   var boatGroup=null, prop=null;
   var trapBuoy=null, lastTurnSet=null, anchorChain=null; // ANIM PASS: persistent bait buoy + turn-change guard + anchor chain
   var backTex=null;
@@ -4487,6 +4522,7 @@ var SceneFX = (function(){
      old card + line hanging next to the new one. This sweeps any live
      dangle card AND its line out of the scene and the prop list. */
   function clearBaitDangle(){
+    baitDangleGen++; // invalidate any dangle whose spawn is still queued in the spawnProp backlog — it will find its generation stale and remove itself on its first frame (see the bait case in trigger())
     for(var bi=fxProps.length-1;bi>=0;bi--){
       var bm2=fxProps[bi].mesh;
       if(bm2 && bm2.userData && bm2.userData.item4==="baitCard"){
@@ -6315,7 +6351,7 @@ var SceneFX = (function(){
         // to the water at the opponent (tip at y≈-0.2). Each fresh
         // strike re-aims with a small jitter and lands with a splash +
         // ring at the opponent so the eye is drawn to where it hit.
-        var strike=(boltT>0.30&&boltT<1.35)||(boltT>1.75&&boltT<2.80)||(boltT>3.20&&boltT<4.45);
+        var strike=(boltT>0.30&&boltT<1.50)||(boltT>1.80&&boltT<3.00)||(boltT>3.30&&boltT<4.60); // HOLD PASS (Jenna, real play): each strike now holds ~1.2-1.3s — at phone frame rates a ~1s hold could land between two glance-aways; three long holds inside the 4.8s window cannot all be missed
         if(strike && !boltMesh.visible){
           boltMesh.position.set((boltAt?boltAt.x:0)+(rnd(Math.floor(boltT*997)+11)-0.5)*1.3, 6.3, (boltAt?boltAt.z:0)+(rnd(Math.floor(boltT*613)+29)-0.5)*1.3);
           if(boltAt){ doSplashAt(boltAt.x,boltAt.z,false); spawnRing(new THREE.Vector3(boltAt.x,0.06,boltAt.z),0xfff3a0,3.4); }
@@ -6418,6 +6454,7 @@ var SceneFX = (function(){
      springs, the game ends, or a new game starts. */
   function clearOneShotFx(){
     var i;
+    baitDangleGen++; // a queued bait dangle from the old game must not spawn into the new one (see clearBaitDangle)
     for(i=fxProps.length-1;i>=0;i--){ try{ scene.remove(fxProps[i].mesh); }catch(e){} if(fxProps[i].mesh && fxProps[i].mesh.userData && fxProps[i].mesh.userData.line){ try{ scene.remove(fxProps[i].mesh.userData.line); }catch(e){} } }
     fxProps.length=0;
     for(i=flights.length-1;i>=0;i--){ try{ scene.remove(flights[i].obj); }catch(e){} }
@@ -6841,12 +6878,12 @@ var SceneFX = (function(){
           // card it is — hung high on a thick pale line from your hand,
           // swinging and slowly turning so the face reads.
           // FIX ROUND (Jenna, real play: "could not confirm it dips or
-          // holds"): the dangle now runs a full 6.4s in plain phases —
-          // rise ~0.9s, a swinging HOLD ~2.4s, one deep slow DIP
-          // (~1.15s) that puts the card's lower half under the surface
-          // (splash + ring going in, splash + ring coming back out),
-          // then a second swinging HOLD ~1.9s — before the red buoy
-          // marks the set trap until it springs.
+          // holds"): the dangle runs a full 6.4s — rise ~0.9s, then
+          // swinging holds broken by TWO deep slow DIPS (~1.4s each)
+          // that put the card's lower two-thirds under the surface
+          // (splash + ring going in and coming back out of each one)
+          // — before the red buoy marks the set trap until it springs.
+          // (The dip count/placement lives in the prop fn below.)
           /* SINGLE-INSTANCE + OPEN WATER (Jenna, real play: "two copies
              of the chosen card" + "it never dips"): any earlier dangle
              (card + line) is swept first, so this card is the ONLY one;
@@ -6859,23 +6896,41 @@ var SceneFX = (function(){
           clearTrapBuoy();
           var baitTex = ev.mateId ? frontTexFor(ev.mateId.slice(0,-1) + mateSuitOf(ev.mateId.slice(-1))) : backTex; // the dangling card is the setter's chosen card = the mate of the rigged ask target
           var baitCard=makeCardObj(baitTex); baitCard.userData.item4="baitCard";
+          baitCard.userData.baitGen=baitDangleGen; // SINGLE-INSTANCE GEN GUARD: clearBaitDangle() above bumped the generation; if a LATER set/spring/new-game bumps it again before this (possibly backlog-deferred) prop first runs, the prop removes itself below instead of becoming a second copy
           var baitLine=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,1,6), new THREE.MeshBasicMaterial({ color:0xfff0b3 }));
           baitLine.castShadow=false; scene.add(baitLine);
           baitCard.userData.line=baitLine; // so clearBaitDangle / clearOneShotFx can sweep the line with the card
           var hangPos=new THREE.Vector3(trapSpot.x, 2.75, trapSpot.z);
           spawnProp(baitCard,6.4,function(k,m){
+            if(m.userData.baitGen!==baitDangleGen){ // superseded before it ever showed — die silently, taking the line with it
+              if(baitLine.parent) scene.remove(baitLine);
+              m.visible=false; return;
+            }
             if(k<0.14){ var u0=easeOut(k/0.14); m.position.lerpVectors(aPos,hangPos,u0); }
             else {
               m.position.copy(hangPos);
               m.position.y += Math.sin((k-0.14)*Math.PI*2.6)*0.13;
-              if(k>0.50 && k<0.72){ var dk=(k-0.50)/0.22; m.position.y -= Math.sin(dk*Math.PI)*3.3; } // THE DIP: centre drops to ~-0.55 — the card (half-height 1.6) is under the surface well past its lower half, for a full ~1.4s
+              /* TWO DIPS (Jenna, real play: "it never dips"): the old
+                 single dip sat at k .50–.72 — one ~1.4s window in the
+                 back half of a 6.4s dangle, easy to miss entirely on a
+                 real phone (a glance at the strip, a frame hitch, and
+                 it was gone). The dangle now dips TWICE — k .30–.52
+                 and k .62–.84, ~1.4s each, centre down to ~-0.75 so
+                 the card's lower two-thirds go under — with a splash
+                 + ring going in AND coming out of each dip. In any
+                 3-second stretch of the dangle, a dip is happening or
+                 just happened. */
+              if(k>0.30 && k<0.52){ var dk1=(k-0.30)/0.22; m.position.y -= Math.sin(dk1*Math.PI)*3.5; }
+              if(k>0.62 && k<0.84){ var dk2=(k-0.62)/0.22; m.position.y -= Math.sin(dk2*Math.PI)*3.5; }
             }
             m.rotation.z=Math.sin(k*Math.PI*5)*0.3;
             m.rotation.y=(seat===0?0:Math.PI)+Math.sin(k*2.4)*0.6; // slow turn around the camera-facing yaw: the face catches the viewer, then the back, then the face again
             var cardTop=m.position.clone(); cardTop.y+=1.5;
             setLineSeg(baitLine, aPos, cardTop);
-            if(k>0.525 && !m.userData.dipIn){ m.userData.dipIn=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,4.4); }
-            if(k>0.70 && !m.userData.dipOut){ m.userData.dipOut=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.8); }
+            if(k>0.325 && !m.userData.dip1In){ m.userData.dip1In=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,4.4); }
+            if(k>0.50 && !m.userData.dip1Out){ m.userData.dip1Out=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.8); }
+            if(k>0.645 && !m.userData.dip2In){ m.userData.dip2In=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,4.4); }
+            if(k>0.82 && !m.userData.dip2Out){ m.userData.dip2Out=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.8); }
             if(k>0.965 && !m.userData.buoyed){ m.userData.buoyed=true; makeTrapBuoy(trapSpot.x,trapSpot.z); }
             if(k>=0.999 && baitLine.parent) scene.remove(baitLine);
           });
@@ -6978,8 +7033,8 @@ var SceneFX = (function(){
         // where y≈7.0 rode at/above the top edge) and stays for the
         // full storm; the rain is 34 thick bright streaks (the old
         // 0.022-radius streaks were sub-pixel on a phone) falling the
-        // whole time; the bolt strikes at 0.3s / 1.75s / 3.2s with
-        // ~1.05s / ~1.05s / ~1.25s holds (see tick()).
+        // whole time; the bolt strikes at 0.3s / 1.8s / 3.3s with
+        // ~1.2s / ~1.2s / ~1.3s holds (see tick()).
         var cloudM=makeStormCloudProp();
         cloudM.position.set(O.position.x,5.6,O.position.z);
         spawnProp(cloudM,STORM_DUR,function(k,m){
@@ -7156,23 +7211,39 @@ var SceneFX = (function(){
            the worms are bigger (1.55x) and ride ON the surface
            (y≈0.3, settling only a whisper) instead of sinking into
            the foam, and the prop lives 2.4s so all four sit settled
-           and separately readable for a full beat together. */
+           and separately readable for a full beat together.
+           FIX ROUND 3 (Jenna, real play: "one long worm crossing
+           itself in an X plus a small dot" — driven-browser frames
+           confirmed the read: on the 2.1 ring the four worms still
+           land at the FOAM RING's edge, and each one TUMBLES ~286°
+           (rotation.y = u*5) as it flies, so mid-flight and on
+           landing the four bodies cross and overlap over the bright
+           foam and read as ONE crossed cluster, not four worms):
+           the ring moves OUT to radius 3.3 — open water, well clear
+           of the foam core on every side, adjacent landings ~4.7
+           units apart against a ~2-unit worm — the tumble is GONE
+           (each worm flies and lies at one fixed tangential yaw, so
+           four separate bodies stay four separate bodies), the
+           stagger widens to 0.24s so they land one at a time, the
+           worms grow to 1.75x, and the prop lives 3.0s so all four
+           sit settled and separately readable for ~1.5s together. */
         [0,1,2,3].forEach(function(wi){
-          var worm=makeWormProp(); worm.scale.setScalar(1.55);
+          var worm=makeWormProp(); worm.scale.setScalar(1.75);
           worm.position.copy(aPos); if(wi>0) worm.visible=false;
           var wang=wi*(Math.PI/2)+0.7;
-          var wp=new THREE.Vector3(center.x+Math.cos(wang)*2.1, 0.3, center.z+Math.sin(wang)*2.1);
-          var wDelay=wi*0.14, wDur=2.4;
+          var wp=new THREE.Vector3(center.x+Math.cos(wang)*3.3, 0.3, center.z+Math.sin(wang)*3.3);
+          var wDelay=wi*0.24, wDur=3.0;
+          var wYaw=wang+Math.PI/2; // tangential to the ring: each worm lies pointing its own way around the circle, never crossing a neighbour
           spawnProp(worm,wDur,function(k,m){
             var t2=k*wDur;
             if(t2<wDelay){ m.visible=false; return; }
             m.visible=true;
             var u=Math.min((t2-wDelay)/0.8,1);
             m.position.lerpVectors(aPos,wp,u);
-            m.position.y+=Math.sin(u*Math.PI)*1.9;
+            m.position.y+=Math.sin(u*Math.PI)*(1.7+wi*0.15);
             if(u>=1) m.position.y=wp.y-Math.min((t2-wDelay-0.8)*0.12,0.07); // settled ON the surface, riding it — never sunk into the foam
-            m.rotation.y=u*5+wi*1.7;
-            m.rotation.z=Math.sin(u*24+wi*2.1)*0.5; // the wriggle
+            m.rotation.y=wYaw;
+            m.rotation.z = u<1 ? Math.sin(u*18+wi*2.1)*0.35 : Math.sin(t2*6+wi*1.3)*0.12; // the wriggle — lively in flight, a gentle settle-wriggle on the water, and NO spin
             if(u>=1 && !m.userData.splashed){ m.userData.splashed=true; doSplashAt(wp.x,wp.z,false); spawnRing(new THREE.Vector3(wp.x,0.06,wp.z),0xffffff,2.6); }
           });
         });
@@ -7441,7 +7512,7 @@ var SceneFX = (function(){
   /* Service worker — offline solo play. Registered defensively: inside
      sandboxed previews it may be refused, and the game plays the same. */
   if("serviceWorker" in navigator){
-    try{ navigator.serviceWorker.register("assets/sw.js").catch(function(){}); }catch(e){}
+    try{ navigator.serviceWorker.register("assets/sw.js").then(function(reg){ try{ reg.update(); }catch(e){} }).catch(function(){}); }catch(e){}
   }
   /* Install flow (Add to Home Screen / Install app) */
   var installReady=false;

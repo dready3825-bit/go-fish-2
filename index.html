@@ -639,7 +639,7 @@
       <button class="btn btn-primary btn-block" id="soloBtn">🎣 Play vs the Computer</button>
       <button class="btn btn-block" id="installBtn" style="display:none">📲 How to install</button>
       <div id="liveNotice" role="status"></div>
-      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v19</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v20</div>
       <div class="divider">Play a friend live</div>
       <p style="font-size:13.5px;color:var(--ink-soft);margin:4px 2px 10px;line-height:1.55;text-align:left">Send your friend this app's link — https://dready3825-bit.github.io/go-fish-2/ — they can install it too. One of you taps <b>Create a room</b> and gets a short 6-letter code — tell your friend the code, they type it in below and tap <b>Join room</b>. That's it — no long codes to copy and paste.</p>
 
@@ -3496,6 +3496,8 @@ var SceneFX = (function(){
   var stormT=0, endFired=false; // ITEM 4 (Shark Bite): the old fin cone's state is gone - the shark is a spawnProp now.
   var STORM_DUR=5.4; // the storm runs 5.4s (was 4.8s) — cloud, rain and all three long-hold bolt strikes live inside this one window; tick(), animBusy() and clearExpiredFx() all read it. With the real-time FX clock (see tick) these are true wall seconds on every display, so the storm cannot be missed in a glance.
   var fxProps=[], boltMesh=null, boltT=9, boltAt=null;
+  var boltVariant=-1; /* FIX ROUND 7: which strike variant the live bolt currently carries (-1 = none yet); tick() rebuilds the bolt whenever a new strike starts with a different variant. */
+  var BOLT_STRIKE_SPOTS=[{x:-1.15,z:0.25,tip:-0.05},{x:0.95,z:-0.55,tip:0.35},{x:0.05,z:0.85,tip:0}]; /* FIX ROUND 7: each strike lands at a DIFFERENT spot around boltAt (left / right / centre-forward) with its variant's tip x, so the three strikes read as three separate events in three places. */
   var baitDangleGen=0; /* BAIT SINGLE-INSTANCE, generation guard: bumped by every clearBaitDangle()/clearOneShotFx(). A dangle prop whose spawn was DEFERRED by the spawnProp backlog is not in fxProps yet, so the sweep cannot see it — the generation is how a superseded dangle recognises itself the moment its fn first runs and removes itself instead of becoming the second copy Jenna saw. */
   var baitDangleCard=null; /* BAIT HAND SYNC (Jenna, real play: "the same card was still fully visible in my hand at the same time — TWO copies on screen at once"): the id of the setter's chosen card while its dangle is live. The game rules keep that card in the setter's hand (the trap references its mate), so the HAND copy is hidden for exactly the dangle's life — set when the dangle is created, cleared when it ends, is swept, or the trap springs — leaving the dangling card as the ONLY copy on screen. render() reads baitDangleCardId() so a mid-dangle re-render keeps it hidden; syncBaitHand() covers the gap between the trigger and the next render. */
   var boatGroup=null, prop=null;
@@ -4623,14 +4625,21 @@ var SceneFX = (function(){
     }
     return g;
   }
-  function makeBolt(){
+  function makeBolt(variant){
     /* VISIBILITY (Jenna: "the lightning bolt must be clearly visible,
        not just a brief flash"): the bolt now runs the FULL height from
        the storm cloud (y≈6.9) down to the water at the opponent
        (y≈0.4) — the old bolt was only ~3.3 long and stopped mid-air
-       well above its target. Thick near-white core, pale halo, two
-       branch forks, and a glowing impact ball at the tip where it
-       lands. tick() holds each strike ~0.6-0.75s (see there).
+       well above its target. Thick near-white core, pale halo, branch
+       forks, and a glowing impact ball at the tip where it lands.
+       FIX ROUND 7 (Jenna, live v19 verification: "three distinct
+       strikes NOT distinguishable — the bolt looked identical in every
+       mid-storm frame"): the bolt is now built per-strike from one of
+       THREE different zigzag paths (variant 0/1/2): different lean,
+       different breakpoints, different fork sides and counts, and a
+       different tip x — and tick() additionally lands each strike at
+       a different offset around the strike point, so no two strikes
+       share a silhouette or a landing spot.
        FIX ROUND (Jenna, real play: "the bolt never appears" — verified
        in a driven browser: boltMesh was visible, in-scene and correctly
        positioned, yet nothing showed): the old bolt was ONE flat ribbon
@@ -4656,16 +4665,37 @@ var SceneFX = (function(){
       var seg=new THREE.Mesh(new THREE.BoxGeometry(coreW,len+0.2,coreW), bm);
       seg.position.set((x1+x2)/2,(y1+y2)/2,0); seg.rotation.z=Math.atan2(dx,-dy); half.add(seg);
     }
-    var pts=[[0,0],[0.55,-1.7],[-0.3,-3.2],[0.45,-4.8],[-0.05,-6.5]];
+    var BOLT_VARIANTS=[
+      { pts:[[0,0],[0.55,-1.7],[-0.3,-3.2],[0.45,-4.8],[-0.05,-6.5]],
+        forks:[[0.55,-1.7, 1.6,-3.0],[-0.3,-3.2, -1.45,-4.5]] },              // strike 1: leans right first, forks right-high + left-low
+      { pts:[[0,0],[-0.85,-1.5],[0.15,-3.0],[-0.75,-4.7],[0.35,-6.5]],
+        forks:[[-0.85,-1.5, -2.0,-2.7],[0.15,-3.0, 1.35,-4.3]] },             // strike 2: mirror lean (left first), forks left-high + right-low
+      { pts:[[0,0],[0.2,-1.8],[-0.15,-3.4],[0.1,-5.0],[0,-6.5]],
+        forks:[[0.2,-1.8, -1.1,-3.1],[-0.15,-3.4, 1.15,-4.9],[0.1,-5.0, -0.95,-5.9]] } // strike 3: near-straight narrow zigzag, THREE forks
+    ];
+    var bv=BOLT_VARIANTS[(variant|0)%3];
+    var pts=bv.pts;
     for(var i=0;i<pts.length-1;i++) boltSeg(pts[i][0],pts[i][1],pts[i+1][0],pts[i+1][1],0.62,1.3);
-    boltSeg(0.55,-1.7, 1.6,-3.0, 0.38,0.8);   // fork 1
-    boltSeg(-0.3,-3.2, -1.45,-4.5, 0.38,0.8); // fork 2
+    for(var fi=0;fi<bv.forks.length;fi++) boltSeg(bv.forks[fi][0],bv.forks[fi][1],bv.forks[fi][2],bv.forks[fi][3],0.38,0.8);
     g.add(half);
     var half2=half.clone(); half2.rotation.y=Math.PI/2; g.add(half2); // the crossed twin: same zigzag in the ZY plane
-    var tipGlow=new THREE.Mesh(new THREE.SphereGeometry(0.78,10,8), halo); tipGlow.position.set(-0.05,-6.5,0); g.add(tipGlow);
-    var tipCore=new THREE.Mesh(new THREE.SphereGeometry(0.3,10,8), bm); tipCore.position.set(-0.05,-6.5,0); g.add(tipCore);
+    var tipX=pts[pts.length-1][0];
+    var tipGlow=new THREE.Mesh(new THREE.SphereGeometry(0.78,10,8), halo); tipGlow.position.set(tipX,-6.5,0); g.add(tipGlow);
+    var tipCore=new THREE.Mesh(new THREE.SphereGeometry(0.3,10,8), bm); tipCore.position.set(tipX,-6.5,0); g.add(tipCore);
     g.traverse(function(ch){ ch.renderOrder=20; }); // draw after the cloud/rain transparents, never painted over by them
     g.visible=false; return g;
+  }
+  /* FIX ROUND 7: swap the live bolt's geometry for strike variant v —
+     the old children are removed and the fresh variant's children are
+     moved in, so the strike that appears is a genuinely different bolt
+     (path, forks, tip), not the same mesh re-shown. boltMesh itself
+     (identity, scene membership, probe references) never changes. */
+  function rebuildBolt(v){
+    if(!boltMesh) return;
+    var fresh=makeBolt(v);
+    while(boltMesh.children.length) boltMesh.remove(boltMesh.children[0]);
+    while(fresh.children.length) boltMesh.add(fresh.children[0]);
+    boltMesh.visible=false;
   }
   function iceSpread(targetPos){
     var g=new THREE.Group();
@@ -6407,22 +6437,39 @@ var SceneFX = (function(){
         // Storm Surge: the bolt strikes DOWN OUT OF the storm cloud
         // onto the water right at the opponent (boltAt = the open-
         // water strike point under the storm cloud over the target's
-        // bow — see the storm case in trigger()). VISIBILITY (Jenna,
-        // real play: "not a sub-second flash"): three strikes with
-        // LONG holds — ~1.25s, ~1.25s, then ~1.65s — inside the 5.4s
-        // storm window. The bolt body runs the full height from the
-        // cloud (its top sits at y≈5.9, inside the lowered cloud
-        // cluster) down to the water at the strike point (tip glow
-        // breaking the surface at y≈-0.6). Each fresh
-        // strike re-aims with a small jitter and lands with a splash +
-        // ring at the opponent so the eye is drawn to where it hit.
-        var strike=(boltT>0.30&&boltT<1.55)||(boltT>1.85&&boltT<3.10)||(boltT>3.40&&boltT<5.05); // HOLD PASS (Jenna, real play): each strike holds ~1.25-1.65 real seconds inside the 5.4s window — with the real-time FX clock these holds are true wall time at any refresh rate, so three long holds cannot all be missed
+        // bow — see the storm case in trigger()). The bolt body runs
+        // the full height from the cloud (its top sits at y≈5.9,
+        // inside the lowered cloud cluster) down to the water at the
+        // strike point (tip glow breaking the surface at y≈-0.6).
+        // FIX ROUND 7 (Jenna, live v19 verification: "three distinct
+        // strikes NOT distinguishable — the bolt looked identical and
+        // continuously present in every mid-storm frame; only the tail
+        // frame showed bolt-off"): the old windows were 1.25-1.65s ON
+        // with only 0.30s off between them — at capture cadence the
+        // 0.3s gaps were almost never sampled, and the geometry never
+        // changed, so the storm read as ONE continuous bolt. Now:
+        // strike 1 ON 0.30-1.20s, bolt FULLY OFF 1.20-2.00s (0.80s of
+        // cloud + rain only, no bolt anywhere), strike 2 ON
+        // 2.00-2.90s, FULLY OFF 2.90-3.70s (another 0.80s gap),
+        // strike 3 ON 3.70-4.90s, then OFF for the 4.90-5.40s tail.
+        // Each strike is also a DIFFERENT bolt: rebuildBolt() swaps
+        // in that strike's own zigzag path/forks, and the strike
+        // lands at its own spot from BOLT_STRIKE_SPOTS (left, right,
+        // centre-forward) with its splash + ring at that landing
+        // point. boltMesh.visible is driven ONLY by the strike index
+        // below — during a gap it is hard false, every single frame.
+        var strikeIdx = (boltT>0.30&&boltT<1.20) ? 0 : (boltT>2.00&&boltT<2.90) ? 1 : (boltT>3.70&&boltT<4.90) ? 2 : -1;
+        var strike = strikeIdx>=0;
         if(strike && !boltMesh.visible){
-          boltMesh.position.set((boltAt?boltAt.x:0)+(rnd(Math.floor(boltT*997)+11)-0.5)*1.3, 5.9, (boltAt?boltAt.z:0)+(rnd(Math.floor(boltT*613)+29)-0.5)*1.3);
-          if(boltAt){ doSplashAt(boltAt.x,boltAt.z,false); spawnRing(new THREE.Vector3(boltAt.x,0.06,boltAt.z),0xfff3a0,3.4); }
+          // a fresh strike just started (the bolt was off last frame)
+          if(boltVariant!==strikeIdx){ rebuildBolt(strikeIdx); boltVariant=strikeIdx; }
+          var spot=BOLT_STRIKE_SPOTS[strikeIdx];
+          boltMesh.position.set((boltAt?boltAt.x:0)+spot.x, 5.9, (boltAt?boltAt.z:0)+spot.z);
+          boltMesh.visible=true;
+          if(boltAt){ var landX=boltAt.x+spot.x+spot.tip, landZ=boltAt.z+spot.z; doSplashAt(landX,landZ,false); spawnRing(new THREE.Vector3(landX,0.06,landZ),0xfff3a0,3.4); }
         }
         boltMesh.visible=strike;
-      } else boltMesh.visible=false;
+      } else { boltMesh.visible=false; boltVariant=-1; }
     }
     // Goldie leaves a little golden wake while dashing in for Goldie's Gift
     if(goldie && goldieDash>0 && t>goldieWakeAt){ goldieWakeAt=t+0.26; spawnRing(goldie.position.clone().setY(0.06),0xffc98a,1.7); }
@@ -6533,7 +6580,7 @@ var SceneFX = (function(){
     if(monsterAnim) monsterAnim=null;
     if(monster) monster.visible=false;
     goldieOrbit=null; clearLuckyHover(); // ITEM 4: a new game also clears Goldie's orbit and any hovering Lucky cards
-    stormT=0; boltT=9; if(boltMesh) boltMesh.visible=false;
+    stormT=0; boltT=9; boltVariant=-1; if(boltMesh) boltMesh.visible=false;
     confettiT=9; if(confetti) confetti.visible=false;
     if(anglers.pier){ anglers.pier.userData.cast=null; anglers.pier.userData.domeT=9; if(anglers.pier.userData.dome) anglers.pier.userData.dome.material.opacity=0; }
     if(anglers.boat){ anglers.boat.userData.cast=null; anglers.boat.userData.domeT=9; if(anglers.boat.userData.dome) anglers.boat.userData.dome.material.opacity=0; }
@@ -6556,7 +6603,7 @@ var SceneFX = (function(){
     for(i=ringsFx.length-1;i>=0;i--){ if(ringsFx[i].t>=ringsFx[i].dur){ try{ scene.remove(ringsFx[i].mesh); }catch(e){} ringsFx.splice(i,1); } }
     for(i=fogFx.length-1;i>=0;i--){ if(fogFx[i].t>=fogFx[i].dur){ try{ scene.remove(fogFx[i].mesh); }catch(e){} fogFx.splice(i,1); } }
     if(monsterAnim && monsterAnim.t>=monsterAnim.dur){ monsterAnim=null; if(monster) monster.visible=false; }
-    if(boltT>=STORM_DUR){ boltT=9; if(boltMesh) boltMesh.visible=false; }
+    if(boltT>=STORM_DUR){ boltT=9; boltVariant=-1; if(boltMesh) boltMesh.visible=false; }
     if(confettiT>=4.6){ confettiT=9; if(confetti) confetti.visible=false; }
     if(anglers.pier && anglers.pier.userData.domeT>=anglers.pier.userData.domeDur){ anglers.pier.userData.domeT=9; if(anglers.pier.userData.dome) anglers.pier.userData.dome.material.opacity=0; }
     if(anglers.boat && anglers.boat.userData.domeT>=anglers.boat.userData.domeDur){ anglers.boat.userData.domeT=9; if(anglers.boat.userData.dome) anglers.boat.userData.dome.material.opacity=0; }
@@ -6962,22 +7009,53 @@ var SceneFX = (function(){
           // wall-seconds and both dips flashed past in ~1.1s while
           // she was still reading the strip. The FX clock is now
           // real time (see tick), and the show is lengthened into
-          // the window that always plays: a 3.6 real-second dangle —
-          // rise ~0.3s, DIP 1 at 0.58–1.44s, DIP 2 at 1.94–2.81s
-          // (each putting the card's lower two-thirds under, with a
-          // splash + ring going in, a second splash at the bottom,
-          // and another coming out), buoy at ~3.2s — and the turn
-          // gates hold the spring until the dangle finishes (see
-          // baitDangling() in the UI gates), so the dips cannot be
-          // cut short. (The dip placement lives in the prop fn below.)
+          // the window that always plays.
+          // FIX ROUND 7 (Jenna, live v19 verification: "two dips NOT
+          // observed — in 5 firings the card's lower half never went
+          // under the water; at 2.0s the card was tilted with a splash
+          // at the fishing line's red bobber, but the card itself
+          // stayed dry and above the water"): TWO root causes found.
+          // (1) THE SPOT WAS ON THE BOAT, not over open water: 3.1
+          // units off the boat angler lands at z≈-4.27, which is
+          // exactly ON the scaled hull's centre-facing side line
+          // (overBoat() agrees — that point tests as over the hull),
+          // so the descending card slid down/behind the hull side
+          // instead of entering water, and every dip splash — fired
+          // at that same over-hull point — was RELOCATED by
+          // doSplashAt's deck-avoidance walk toward the pond centre,
+          // which is why the splash appeared at the bobber, away
+          // from the card. The spot below now walks toward the pond
+          // centre until overDeck() is false, plus one extra step of
+          // clearance — genuine open water for BOTH foes (the pier
+          // spot at 3.1 off was already open and does not move).
+          // (2) THE DIP PROFILE PEAKED FOR AN INSTANT: a pure sine
+          // dip touches full depth for a single frame, so frame
+          // captures between peaks showed a dry card. The dips are
+          // now TRAPEZOIDS — descend, HOLD fully submerged, rise —
+          // inside a longer 4.6 real-second dangle: DIP 1 at
+          // 0.64–1.93s (lower half under ~0.84–1.74s, at full depth
+          // ~1.03–1.55s), DIP 2 at 2.48–3.77s (lower half under
+          // ~2.68–3.58s, at full depth ~2.87–3.39s), buoy at ~4.1s.
+          // Depth is 3.9
+          // from the 2.75 hang: the card (half-height 1.575 at its
+          // 2.5x flight scale) centres at y≈-1.15 at full dip, so
+          // its lower half — in fact everything but the top ~0.4 —
+          // is below the y≈0 water line for the whole hold. Every
+          // splash + ring fires at the CARD's own current x,z
+          // (m.position), never at a precomputed spot, so the splash
+          // is on the card itself, at both dips. The turn gates hold
+          // the spring until the dangle finishes (see baitDangling()
+          // in the UI gates), so the dips cannot be cut short.
           /* SINGLE-INSTANCE + OPEN WATER (Jenna, real play: "two copies
              of the chosen card" + "it never dips"): any earlier dangle
              (card + line) is swept first, so this card is the ONLY one;
-             and the spot moves from 2.4 to 3.1 units off the foe —
-             clear of the boat's hull / pier edge, over open water,
-             where a dip can actually be seen instead of sliding down
-             the side of the boat. */
+             and the spot starts 3.1 units off the foe, then walks to
+             genuine open water (see FIX ROUND 7 above) where a dip can
+             actually be seen instead of sliding down the boat's side. */
           var trapSpot=O.position.clone().add(new THREE.Vector3(0,0, O.position.z>0 ? -3.1 : 3.1));
+          var trapGuard=0;
+          while(overDeck(trapSpot.x,trapSpot.z) && trapGuard<24){ var td=Math.sqrt(trapSpot.x*trapSpot.x+trapSpot.z*trapSpot.z)||1; trapSpot.x-=trapSpot.x/td*0.35; trapSpot.z-=trapSpot.z/td*0.35; trapGuard++; }
+          if(trapGuard>0){ var td2=Math.sqrt(trapSpot.x*trapSpot.x+trapSpot.z*trapSpot.z)||1; trapSpot.x-=trapSpot.x/td2*0.35; trapSpot.z-=trapSpot.z/td2*0.35; } // one extra step past the hull side / deck edge, so the card and its splashes sit in open water, not on the boundary (splashes on the boundary get relocated by doSplashAt — the v19 "splash at the bobber" tell)
           clearBaitDangle();
           clearTrapBuoy();
           var baitChosenId = ev.mateId ? (ev.mateId.slice(0,-1) + mateSuitOf(ev.mateId.slice(-1))) : null; // the setter's chosen card itself (ev.mateId names its mate)
@@ -6989,7 +7067,19 @@ var SceneFX = (function(){
           baitLine.castShadow=false; scene.add(baitLine);
           baitCard.userData.line=baitLine; // so clearBaitDangle / clearOneShotFx can sweep the line with the card
           var hangPos=new THREE.Vector3(trapSpot.x, 2.75, trapSpot.z);
-          spawnProp(baitCard,3.6,function(k,m){
+          /* FIX ROUND 7 dip profile: a trapezoid, not a sine — descend
+             over the first 30% of the dip window, HOLD at full depth
+             for the middle 40% (~0.52s per dip, with the lower half
+             under for ~0.9s per dip), rise over the last 30%. Full
+             depth is a sustained state, not an instant. */
+          function baitDipDepth(k,a,b){
+            if(k<=a || k>=b) return 0;
+            var u=(k-a)/(b-a);
+            if(u<0.3) return Math.sin((u/0.3)*Math.PI/2);
+            if(u>0.7) return Math.sin(((1-u)/0.3)*Math.PI/2);
+            return 1;
+          }
+          spawnProp(baitCard,4.6,function(k,m){
             if(m.userData.baitGen!==baitDangleGen){ // superseded before it ever showed — die silently, taking the line with it
               if(baitLine.parent) scene.remove(baitLine);
               m.visible=false; return;
@@ -6998,25 +7088,33 @@ var SceneFX = (function(){
             else {
               m.position.copy(hangPos);
               m.position.y += Math.sin((k-0.08)*Math.PI*2.6)*0.13;
-              /* TWO DIPS (see DANGLE TIMING above): dip 1 at
-                 k .16–.40 (0.58–1.44 real-s), dip 2 at k .54–.78
-                 (1.94–2.81 real-s), centre down 3.5 so the card's
-                 lower two-thirds go under the surface — with a
-                 splash + ring going in, a second splash at the
-                 bottom of the dip, and another coming out. */
-              if(k>0.16 && k<0.40){ var dk1=(k-0.16)/0.24; m.position.y -= Math.sin(dk1*Math.PI)*3.5; }
-              if(k>0.54 && k<0.78){ var dk2=(k-0.54)/0.24; m.position.y -= Math.sin(dk2*Math.PI)*3.5; }
+              /* TWO DIPS (see DANGLE TIMING / FIX ROUND 7 above):
+                 dip 1 at k .14–.42 (0.64–1.93 real-s), dip 2 at
+                 k .54–.82 (2.48–3.77 real-s), centre down 3.9 from
+                 the 2.75 hang to y≈-1.15 at full depth — the card's
+                 half-height is 1.575, so the bottom reaches y≈-2.7
+                 and only the top ~0.4 stays above the y≈0 water
+                 line, HELD there for the middle of each dip. Splash
+                 + ring going in, another at full depth, another
+                 coming out — all at the card itself (below). */
+              m.position.y -= baitDipDepth(k,0.14,0.42)*3.9;
+              m.position.y -= baitDipDepth(k,0.54,0.82)*3.9;
             }
             m.rotation.z=Math.sin(k*Math.PI*5)*0.3;
             m.rotation.y=(seat===0?0:Math.PI)+Math.sin(k*2.4)*0.6; // slow turn around the camera-facing yaw: the face catches the viewer, then the back, then the face again
             var cardTop=m.position.clone(); cardTop.y+=1.5;
             setLineSeg(baitLine, aPos, cardTop);
-            if(k>0.185 && !m.userData.dip1In){ m.userData.dip1In=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,4.4); }
-            if(k>0.28 && !m.userData.dip1Bot){ m.userData.dip1Bot=true; doSplashAt(trapSpot.x,trapSpot.z,false); }
-            if(k>0.375 && !m.userData.dip1Out){ m.userData.dip1Out=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.8); }
-            if(k>0.565 && !m.userData.dip2In){ m.userData.dip2In=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,4.4); }
-            if(k>0.66 && !m.userData.dip2Bot){ m.userData.dip2Bot=true; doSplashAt(trapSpot.x,trapSpot.z,false); }
-            if(k>0.755 && !m.userData.dip2Out){ m.userData.dip2Out=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.8); }
+            /* FIX ROUND 7: every dip splash + ring fires at the CARD's
+               own current position (m.position.x/z — the card hangs
+               directly over that point), so the splash is visibly ON
+               the card as it enters, holds under, and leaves the
+               water — at both dips, at two distinct moments. */
+            if(k>0.155 && !m.userData.dip1In){ m.userData.dip1In=true; doSplashAt(m.position.x,m.position.z,true); spawnRing(new THREE.Vector3(m.position.x,0.06,m.position.z),0xffcf4d,4.4); }
+            if(k>0.28 && !m.userData.dip1Bot){ m.userData.dip1Bot=true; doSplashAt(m.position.x,m.position.z,true); spawnRing(new THREE.Vector3(m.position.x,0.06,m.position.z),0xffcf4d,3.8); }
+            if(k>0.40 && !m.userData.dip1Out){ m.userData.dip1Out=true; doSplashAt(m.position.x,m.position.z,true); spawnRing(new THREE.Vector3(m.position.x,0.06,m.position.z),0xffcf4d,4.4); }
+            if(k>0.555 && !m.userData.dip2In){ m.userData.dip2In=true; doSplashAt(m.position.x,m.position.z,true); spawnRing(new THREE.Vector3(m.position.x,0.06,m.position.z),0xffcf4d,4.4); }
+            if(k>0.68 && !m.userData.dip2Bot){ m.userData.dip2Bot=true; doSplashAt(m.position.x,m.position.z,true); spawnRing(new THREE.Vector3(m.position.x,0.06,m.position.z),0xffcf4d,3.8); }
+            if(k>0.80 && !m.userData.dip2Out){ m.userData.dip2Out=true; doSplashAt(m.position.x,m.position.z,true); spawnRing(new THREE.Vector3(m.position.x,0.06,m.position.z),0xffcf4d,4.4); }
             if(k>0.90 && !m.userData.buoyed){ m.userData.buoyed=true; makeTrapBuoy(trapSpot.x,trapSpot.z); }
             if(k>=0.999){ if(baitLine.parent) scene.remove(baitLine); setBaitDangleCard(null); /* the dangle is over — the card is back in the setter's hand (the buoy alone marks the set trap now) */ }
           });
@@ -7123,7 +7221,7 @@ var SceneFX = (function(){
            The Angled preset also pulled back a touch (CAM_PRESETS)
            so the boat zone has real margin at the top. */
         var stormC=O.position.clone().lerp(new THREE.Vector3(0,0,0),0.22);
-        stormT=STORM_DUR; boltT=0; boltAt={ x:stormC.x, z:stormC.z }; whirlBoost=3; doSplash(true);
+        stormT=STORM_DUR; boltT=0; boltVariant=-1; boltAt={ x:stormC.x, z:stormC.z }; whirlBoost=3; doSplash(true);
         // FIX ROUND (Jenna, real play: "the cloud, rain and bolt do not
         // appear at all"): the whole storm now runs STORM_DUR (5.4s of
         // real time — see the real-time FX clock in tick()).
@@ -7132,8 +7230,11 @@ var SceneFX = (function(){
         // where y≈7.0 rode at/above the top edge) and stays for the
         // full storm; the rain is 34 thick bright streaks (the old
         // 0.022-radius streaks were sub-pixel on a phone) falling the
-        // whole time; the bolt strikes at 0.3s / 1.8s / 3.3s with
-        // ~1.2s / ~1.2s / ~1.3s holds (see tick()).
+        // whole time; the bolt strikes three times as three visibly
+        // separate events — ON 0.30-1.20s / OFF / ON 2.00-2.90s / OFF
+        // / ON 3.70-4.90s, with a full 0.80s bolt-off gap between
+        // strikes, a different bolt path per strike, and a different
+        // landing spot per strike (FIX ROUND 7 — see tick()).
         var cloudM=makeStormCloudProp();
         cloudM.position.set(stormC.x,4.85,stormC.z);
         spawnProp(cloudM,STORM_DUR,function(k,m){
@@ -7152,7 +7253,7 @@ var SceneFX = (function(){
         later(3.25,function(){ doSplashAt(O.position.x+(rnd(53)-0.5)*3,O.position.z+(rnd(59)-0.5)*3,true); });
         flyCard({ from:oPos, to:center, tex:backTex, dur:0.9, delay:0.55, arc:1.7, spin:true, fade:true });
         flyCard({ from:oPos, to:center, tex:backTex, dur:0.9, delay:0.9, arc:2.0, spin:true, fade:true });
-        /* ATTRIBUTION: the stormed player then draws 1 back — that draw is THEIR cast on THEIR angler, played after the scatter, so it never reads as the actor's draw going to the wrong side. It now casts at 2.95s, as the third strike lands, instead of 1.35s into a 2.3s storm that was already over. */
+        /* ATTRIBUTION: the stormed player then draws 1 back — that draw is THEIR cast on THEIR angler, played after the scatter, so it never reads as the actor's draw going to the wrong side. It casts at 2.95s, late in the storm (between strikes 2 and 3), instead of 1.35s into a 2.3s storm that was already over. */
         later(2.95,function(){ startCast(O,{ tex:backTex }); });
         react(O,"sad",1.1); react(A,"wow",0.8);
         break;

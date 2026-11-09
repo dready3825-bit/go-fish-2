@@ -2477,21 +2477,23 @@ function render(){
   /* scene + sounds on new events */
   var ev=v.lastEvent;
   if(ev && ev.seq!==lastSeqSeen){
-    /* NEW GAME WITH A RESTARTED SEQ (live rematch): dealGame resets
-       eventSeq, so a fresh game's start event arrives with a SMALLER
-       seq than the finished game's last event. Solo rematches reset
-       lastSeqSeen up front, but live clients never do — without this
-       check the start event fell into the "next event" path below,
-       which FIRED the finished game's still-pending deferred
-       celebration (its PAIR! banner plus a final-score header/pile
-       sync from the old view) into the new game, where it lingered.
-       A restarted seq IS a new game: drop the pending presentations
-       silently (never fire them) and take the first-game path, whose
-       start handling sweeps the strip and any stale celebration. */
-    if(ev.kind==="start" && lastSeqSeen>0 && ev.seq<=lastSeqSeen){
+    /* NEW GAME (live rematch): ANY start event arriving after events
+       were already seen IS a new game — whether or not the server
+       restarted its eventSeq. The old condition also required
+       ev.seq<=lastSeqSeen, so a rematch whose server kept counting
+       fell into the "next event" path below, which FIRED the finished
+       game's still-pending deferred celebration (its PAIR! banner
+       plus a final-score header/pile sync from the old view) into
+       the new game, where it lingered. A start event IS a new game:
+       drop the pending presentations silently (never fire them),
+       sweep the old celebration + the 3D scene, and take the
+       first-game path. */
+    if(ev.kind==="start" && lastSeqSeen>0){
       if(deferredFx){ var ndFx=deferredFx; deferredFx=null; if(ndFx.timer) clearTimeout(ndFx.timer); }
       if(deferredShownFx){ var ndSx=deferredShownFx; deferredShownFx=null; if(ndSx.timer) clearTimeout(ndSx.timer); }
       if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false);
+      if(window.SceneFX && SceneFX.resetForNewGame) SceneFX.resetForNewGame();
+      clearPairCelebration();
       celebratedSeq=0; prevPairCounts=null; lastSeqSeen=0;
     }
     var first = lastSeqSeen===0;
@@ -2537,10 +2539,17 @@ function render(){
       }
     } else {
       if(ev.pairId) celebratedSeq=ev.seq;
-      if(ev.kind==="start") pushEventToStrip(ev, v);
       if(ev.kind==="start"){
-        if(v.you.pairs.length) celebratePair(v, { actor:"you", pairId:v.you.pairs[v.you.pairs.length-1] });
-        else if(v.opponent && v.opponent.pairs.length) celebratePair(v, { actor:"opponent", pairId:v.opponent.pairs[v.opponent.pairs.length-1] });
+        /* REMATCH SWEEP: a new game starts with NO pair banner.
+           Pairs banked on the deal still land in the pair piles, the
+           score and the conversation strip — but the PAIR!
+           celebration no longer fires for them on the start event
+           (it used to, which put a PAIR! banner in the new game's
+           scene the moment a rematch deal banked a pair, reading as
+           the finished game's banner never clearing). */
+        clearPairCelebration();
+        if(window.SceneFX && SceneFX.resetForNewGame) SceneFX.resetForNewGame();
+        pushEventToStrip(ev, v);
       }
     }
   }
@@ -2890,11 +2899,27 @@ els.layBtn.addEventListener("click", function(){
   afterChange();
   releaseBusyWhenFxDone();
 });
+function dropPendingPresentations(){
+  /* REMATCH SWEEP: a pending deferred presentation (the finished
+     game's last pair celebration or draw, still waiting on its strip
+     beat) must NEVER fire into the new game, and the old PAIR!
+     banner + confetti + leftover 3D props die the moment Rematch is
+     tapped — in EVERY mode. (The live branch of requestRematch used
+     to skip this sweep entirely, and a deferred celebration whose
+     poll failsafe outlived the tap could fire the finished game's
+     PAIR! banner into the new game's scene.) */
+  if(deferredFx){ var dpf=deferredFx; deferredFx=null; if(dpf.timer) clearTimeout(dpf.timer); }
+  if(deferredShownFx){ var dps=deferredShownFx; deferredShownFx=null; if(dps.timer) clearTimeout(dps.timer); }
+  if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false);
+  if(window.SceneFX && SceneFX.resetForNewGame) SceneFX.resetForNewGame();
+  clearPairCelebration();
+}
 function requestRematch(){
-  if(mode==="solo"){ clearPairCelebration(); celebratedSeq=0; prevPairCounts=null; dealGame(S,names); lastSeqSeen=0; selectedMod=null; armed=null; cpuChain=0; afterChange(); return; }
+  dropPendingPresentations();
+  if(mode==="solo"){ celebratedSeq=0; prevPairCounts=null; dealGame(S,names); lastSeqSeen=0; selectedMod=null; armed=null; cpuChain=0; afterChange(); return; }
   if(mode==="guest"||mode==="host"){ sendToHost({ t:"rematch" }); if(view){ view.rematch.you=true; render(); } return; }
   S.rematch[0]=true;
-  if(S.rematch[0] && S.rematch[1]){ clearPairCelebration(); celebratedSeq=0; prevPairCounts=null; dealGame(S,names); lastSeqSeen=0; }
+  if(S.rematch[0] && S.rematch[1]){ celebratedSeq=0; prevPairCounts=null; dealGame(S,names); lastSeqSeen=0; }
   afterChange();
 }
 if(els.endBannerRematch) els.endBannerRematch.addEventListener("click", requestRematch);
@@ -3366,6 +3391,7 @@ var SceneFX = (function(){
   var flights=[], ringsFx=[], fogFx=[];
   var confetti=null, confettiData=[], confettiT=9;
   var stormT=0, endFired=false; // ITEM 4 (Shark Bite): the old fin cone's state is gone - the shark is a spawnProp now.
+  var STORM_DUR=4.8; // FIX ROUND (Jenna, real play): the storm runs 4.8s (was 2.3s) — cloud, rain and all three long-hold bolt strikes live inside this one window; tick(), animBusy() and clearExpiredFx() all read it.
   var fxProps=[], boltMesh=null, boltT=9, boltAt=null;
   var boatGroup=null, prop=null;
   var trapBuoy=null, lastTurnSet=null, anchorChain=null; // ANIM PASS: persistent bait buoy + turn-change guard + anchor chain
@@ -4479,10 +4505,10 @@ var SceneFX = (function(){
       seg.position.set((x1+x2)/2,(y1+y2)/2,0); seg.rotation.z=Math.atan2(dx,-dy); g.add(seg);
     }
     var pts=[[0,0],[0.55,-1.7],[-0.3,-3.2],[0.45,-4.8],[-0.05,-6.5]];
-    for(var i=0;i<pts.length-1;i++) boltSeg(pts[i][0],pts[i][1],pts[i+1][0],pts[i+1][1],0.52,1.05);
-    boltSeg(0.55,-1.7, 1.6,-3.0, 0.3,0.62);   // fork 1
-    boltSeg(-0.3,-3.2, -1.45,-4.5, 0.3,0.62); // fork 2
-    var tipGlow=new THREE.Mesh(new THREE.SphereGeometry(0.62,10,8), halo); tipGlow.position.set(-0.05,-6.5,0); g.add(tipGlow);
+    for(var i=0;i<pts.length-1;i++) boltSeg(pts[i][0],pts[i][1],pts[i+1][0],pts[i+1][1],0.62,1.3);
+    boltSeg(0.55,-1.7, 1.6,-3.0, 0.38,0.8);   // fork 1
+    boltSeg(-0.3,-3.2, -1.45,-4.5, 0.38,0.8); // fork 2
+    var tipGlow=new THREE.Mesh(new THREE.SphereGeometry(0.78,10,8), halo); tipGlow.position.set(-0.05,-6.5,0); g.add(tipGlow);
     var tipCore=new THREE.Mesh(new THREE.SphereGeometry(0.3,10,8), bm); tipCore.position.set(-0.05,-6.5,0); g.add(tipCore);
     g.visible=false; return g;
   }
@@ -6208,19 +6234,21 @@ var SceneFX = (function(){
     }
     // lightning for Storm Surge:
     if(boltMesh){
-      if(boltT<2.3){
+      if(boltT<STORM_DUR){
         boltT+=dt;
         // Storm Surge: the bolt strikes DOWN OUT OF the storm cloud
         // straight onto the opponent (boltAt = the opponent's spot,
-        // where the cloud and rain already hang). VISIBILITY (Jenna:
-        // "clearly visible, not just a brief flash"): three strikes
-        // that HOLD — ~0.75s, ~0.6s, then a ~0.25s final flicker —
-        // and each fresh strike re-aims with a small jitter and lands
-        // with a splash + ring at the opponent so the eye is drawn to
-        // exactly where it hit.
-        var strike=(boltT>0.25&&boltT<1.0)||(boltT>1.2&&boltT<1.8)||(boltT>2.02&&boltT<2.27);
+        // where the cloud and rain already hang). VISIBILITY (Jenna,
+        // real play: "not a sub-second flash"): three strikes with
+        // LONG holds — ~1.05s, ~1.05s, then ~1.25s — inside the 4.8s
+        // storm window. The bolt body runs the full height from the
+        // cloud (its top sits at y≈6.3, inside the cloud cluster) down
+        // to the water at the opponent (tip at y≈-0.2). Each fresh
+        // strike re-aims with a small jitter and lands with a splash +
+        // ring at the opponent so the eye is drawn to where it hit.
+        var strike=(boltT>0.30&&boltT<1.35)||(boltT>1.75&&boltT<2.80)||(boltT>3.20&&boltT<4.45);
         if(strike && !boltMesh.visible){
-          boltMesh.position.set((boltAt?boltAt.x:0)+(rnd(Math.floor(boltT*997)+11)-0.5)*1.3, 6.9, (boltAt?boltAt.z:0)+(rnd(Math.floor(boltT*613)+29)-0.5)*1.3);
+          boltMesh.position.set((boltAt?boltAt.x:0)+(rnd(Math.floor(boltT*997)+11)-0.5)*1.3, 6.3, (boltAt?boltAt.z:0)+(rnd(Math.floor(boltT*613)+29)-0.5)*1.3);
           if(boltAt){ doSplashAt(boltAt.x,boltAt.z,false); spawnRing(new THREE.Vector3(boltAt.x,0.06,boltAt.z),0xfff3a0,3.4); }
         }
         boltMesh.visible=strike;
@@ -6355,7 +6383,7 @@ var SceneFX = (function(){
     for(i=ringsFx.length-1;i>=0;i--){ if(ringsFx[i].t>=ringsFx[i].dur){ try{ scene.remove(ringsFx[i].mesh); }catch(e){} ringsFx.splice(i,1); } }
     for(i=fogFx.length-1;i>=0;i--){ if(fogFx[i].t>=fogFx[i].dur){ try{ scene.remove(fogFx[i].mesh); }catch(e){} fogFx.splice(i,1); } }
     if(monsterAnim && monsterAnim.t>=monsterAnim.dur){ monsterAnim=null; if(monster) monster.visible=false; }
-    if(boltT>=2.3){ boltT=9; if(boltMesh) boltMesh.visible=false; }
+    if(boltT>=STORM_DUR){ boltT=9; if(boltMesh) boltMesh.visible=false; }
     if(confettiT>=4.6){ confettiT=9; if(confetti) confetti.visible=false; }
     if(anglers.pier && anglers.pier.userData.domeT>=anglers.pier.userData.domeDur){ anglers.pier.userData.domeT=9; if(anglers.pier.userData.dome) anglers.pier.userData.dome.material.opacity=0; }
     if(anglers.boat && anglers.boat.userData.domeT>=anglers.boat.userData.domeDur){ anglers.boat.userData.domeT=9; if(anglers.boat.userData.dome) anglers.boat.userData.dome.material.opacity=0; }
@@ -6388,7 +6416,7 @@ var SceneFX = (function(){
        live FX. */
     if(flights.length || fxProps.length || fogFx.length) return true;
     if(timers.length) return true; // FIX ROUND 2 (1): a scheduled FX beat (goldie flyCard at 0.75s, pair flights, castLater) keeps the gate busy until it has fired
-    if(monsterAnim || stormT>0 || boltT<2.3 || confettiT<4.6) return true; // ITEM 4: the fin timer is gone (the shark is an fxProp now); luckyHover is a waiting state, deliberately NOT gated
+    if(monsterAnim || stormT>0 || boltT<STORM_DUR || confettiT<4.6) return true; // ITEM 4: the fin timer is gone (the shark is an fxProp now); luckyHover is a waiting state, deliberately NOT gated
     if(goldieDash>0) return true; // FIX ROUND 2c: Goldie's dash (2.6s) had no term covering its tail
     if(anglers.pier && anglers.pier.userData.cast) return true;
     if(anglers.boat && anglers.boat.userData.cast) return true;
@@ -6490,11 +6518,11 @@ var SceneFX = (function(){
     // Storm Surge: a dark storm cloud - a cluster of dark-grey spheres,
     // same technique as the fog blobs, from the existing primitives.
     var g=new THREE.Group();
-    var cols=[0x4a4a52,0x55555e,0x3f3f46,0x51515a];
-    for(var i=0;i<7;i++){
-      var r=0.9+rnd(i*7)*0.6;
-      var s=new THREE.Mesh(new THREE.SphereGeometry(r,10,8), new THREE.MeshBasicMaterial({ color:cols[i%4], transparent:true, opacity:0.92, depthWrite:false }));
-      s.position.set((rnd(i*13)-0.5)*4.4, (rnd(i*17)-0.5)*0.9, (rnd(i*19)-0.5)*2.0);
+    var cols=[0x36363e,0x42424a,0x2e2e34,0x3c3c44];
+    for(var i=0;i<9;i++){
+      var r=1.15+rnd(i*7)*0.75;
+      var s=new THREE.Mesh(new THREE.SphereGeometry(r,10,8), new THREE.MeshBasicMaterial({ color:cols[i%4], transparent:true, opacity:0.97, depthWrite:false }));
+      s.position.set((rnd(i*13)-0.5)*5.8, (rnd(i*17)-0.5)*1.0, (rnd(i*19)-0.5)*2.4);
       s.scale.y=0.62;
       g.add(s);
     }
@@ -6582,10 +6610,10 @@ var SceneFX = (function(){
   function makeRainProp(){
     // Storm Surge: a sheet of rain streaks over one angler.
     var g=new THREE.Group();
-    var rm=new THREE.MeshBasicMaterial({ color:0xbfe6ff, transparent:true, opacity:0.7, depthWrite:false });
-    for(var i=0;i<22;i++){
-      var s=new THREE.Mesh(new THREE.CylinderGeometry(0.022,0.022,0.6,5), rm);
-      s.position.set((rnd(i*7)-0.5)*4.6, 4, (rnd(i*11)-0.5)*3.0);
+    var rm=new THREE.MeshBasicMaterial({ color:0xd9f3ff, transparent:true, opacity:0.88, depthWrite:false });
+    for(var i=0;i<34;i++){
+      var s=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,1.05,5), rm);
+      s.position.set((rnd(i*7)-0.5)*5.4, 4, (rnd(i*11)-0.5)*3.6);
       s.userData.off=rnd(i*13);
       g.add(s);
     }
@@ -6741,8 +6769,13 @@ var SceneFX = (function(){
           // (the old 1.9 shrink is gone), FACE showing — the trap is
           // announced in the open, both players are told exactly which
           // card it is — hung high on a thick pale line from your hand,
-          // swinging and slowly turning so the face reads, for a full
-          // ~4s with one clear dip to the water before the red buoy
+          // swinging and slowly turning so the face reads.
+          // FIX ROUND (Jenna, real play: "could not confirm it dips or
+          // holds"): the dangle now runs a full 6.4s in plain phases —
+          // rise ~0.9s, a swinging HOLD ~2.4s, one deep slow DIP
+          // (~1.15s) that puts the card's lower half under the surface
+          // (splash + ring going in, splash + ring coming back out),
+          // then a second swinging HOLD ~1.9s — before the red buoy
           // marks the set trap until it springs.
           var trapSpot=O.position.clone().add(new THREE.Vector3(0,0, O.position.z>0 ? -2.4 : 2.4));
           clearTrapBuoy();
@@ -6750,20 +6783,21 @@ var SceneFX = (function(){
           var baitCard=makeCardObj(baitTex); baitCard.userData.item4="baitCard";
           var baitLine=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,1,6), new THREE.MeshBasicMaterial({ color:0xfff0b3 }));
           baitLine.castShadow=false; scene.add(baitLine);
-          var hangPos=new THREE.Vector3(trapSpot.x, 2.45, trapSpot.z);
-          spawnProp(baitCard,4.2,function(k,m){
-            if(k<0.22){ var u0=easeOut(k/0.22); m.position.lerpVectors(aPos,hangPos,u0); }
+          var hangPos=new THREE.Vector3(trapSpot.x, 2.6, trapSpot.z);
+          spawnProp(baitCard,6.4,function(k,m){
+            if(k<0.14){ var u0=easeOut(k/0.14); m.position.lerpVectors(aPos,hangPos,u0); }
             else {
               m.position.copy(hangPos);
-              m.position.y += Math.sin((k-0.22)*Math.PI*3.2)*0.16;
-              if(k>0.78 && k<0.92){ var dk=(k-0.78)/0.14; m.position.y -= Math.sin(dk*Math.PI)*2.0; } // one clear dip to the water
+              m.position.y += Math.sin((k-0.14)*Math.PI*2.6)*0.13;
+              if(k>0.52 && k<0.70){ var dk=(k-0.52)/0.18; m.position.y -= Math.sin(dk*Math.PI)*2.75; } // THE DIP: centre drops to ~-0.15, so the card's lower half is under the surface
             }
             m.rotation.z=Math.sin(k*Math.PI*5)*0.3;
             m.rotation.y=(seat===0?0:Math.PI)+Math.sin(k*2.4)*0.6; // slow turn around the camera-facing yaw: the face catches the viewer, then the back, then the face again
             var cardTop=m.position.clone(); cardTop.y+=1.5;
             setLineSeg(baitLine, aPos, cardTop);
-            if(k>0.82 && !m.userData.dipped){ m.userData.dipped=true; doSplashAt(trapSpot.x,trapSpot.z,false); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.6); }
-            if(k>0.97 && !m.userData.buoyed){ m.userData.buoyed=true; makeTrapBuoy(trapSpot.x,trapSpot.z); }
+            if(k>0.545 && !m.userData.dipIn){ m.userData.dipIn=true; doSplashAt(trapSpot.x,trapSpot.z,false); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.6); }
+            if(k>0.685 && !m.userData.dipOut){ m.userData.dipOut=true; doSplashAt(trapSpot.x,trapSpot.z,false); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.0); }
+            if(k>0.965 && !m.userData.buoyed){ m.userData.buoyed=true; makeTrapBuoy(trapSpot.x,trapSpot.z); }
             if(k>=0.999 && baitLine.parent) scene.remove(baitLine);
           });
           react(A,"happy",0.8); react(O,"wow",0.7);
@@ -6846,29 +6880,36 @@ var SceneFX = (function(){
         break;
 
       case "storm":
-        stormT=2.3; boltT=0; boltAt={ x:O.position.x, z:O.position.z }; whirlBoost=3; doSplash(true);
-        // ITEM 4: the storm cloud pops up above the pond FIRST and hangs
-        // ~2.3s; the bolt strikes DOWN OUT OF the cloud at ~0.3s (see the
-        // bolt timing in tick()). Bolts + churn + scattering are unchanged.
+        stormT=STORM_DUR; boltT=0; boltAt={ x:O.position.x, z:O.position.z }; whirlBoost=3; doSplash(true);
+        // FIX ROUND (Jenna, real play: "the cloud, rain and bolt do not
+        // appear at all"): the whole storm now runs STORM_DUR (4.8s).
+        // The cloud is BIG (9 fat spheres at 1.5x prop scale), hangs
+        // LOW over the foe (y≈5.6 — in frame in every camera preset,
+        // where y≈7.0 rode at/above the top edge) and stays for the
+        // full storm; the rain is 34 thick bright streaks (the old
+        // 0.022-radius streaks were sub-pixel on a phone) falling the
+        // whole time; the bolt strikes at 0.3s / 1.75s / 3.2s with
+        // ~1.05s / ~1.05s / ~1.25s holds (see tick()).
         var cloudM=makeStormCloudProp();
-        cloudM.position.set(O.position.x,7.0,O.position.z);
-        spawnProp(cloudM,2.3,function(k,m){
-          var pop=easeOut(Math.min(k/0.15,1));
-          m.scale.setScalar(Math.max(pop,0.01));
-          m.position.y=7.0+Math.sin(k*Math.PI)*0.15;
-          if(k>0.8){ var f=1-(k-0.8)/0.2; m.traverse(function(ch){ if(ch.material) ch.material.opacity=0.92*f; }); }
+        cloudM.position.set(O.position.x,5.6,O.position.z);
+        spawnProp(cloudM,STORM_DUR,function(k,m){
+          var pop=easeOut(Math.min(k/0.08,1));
+          m.scale.setScalar(Math.max(pop*1.5,0.01));
+          m.position.y=5.6+Math.sin(k*Math.PI*2)*0.12;
+          if(k>0.86){ var f=1-(k-0.86)/0.14; m.traverse(function(ch){ if(ch.material) ch.material.opacity=0.97*f; }); }
         });
         var rainM=makeRainProp(); rainM.position.set(O.position.x,0,O.position.z);
-        spawnProp(rainM,2.3,function(k,m){
-          m.children.forEach(function(s){ s.position.y = 6.3 - ((k*3.4 + s.userData.off) % 1)*5.7; });
-          if(k>0.85){ var rf=1-(k-0.85)/0.15; m.children.forEach(function(s){ s.material.opacity=0.7*rf; }); }
+        spawnProp(rainM,STORM_DUR,function(k,m){
+          m.children.forEach(function(s){ s.position.y = 5.9 - ((k*9 + s.userData.off) % 1)*5.3; });
+          if(k>0.9){ var rf=1-(k-0.9)/0.1; m.children.forEach(function(s){ s.material.opacity=0.88*rf; }); }
         });
-        later(0.5,function(){ doSplash(true); });
-        later(1.1,function(){ doSplashAt(O.position.x+(rnd(31)-0.5)*3,O.position.z+(rnd(47)-0.5)*3,true); });
-        flyCard({ from:oPos, to:center, tex:backTex, dur:0.9, delay:0.35, arc:1.7, spin:true, fade:true });
-        flyCard({ from:oPos, to:center, tex:backTex, dur:0.9, delay:0.6, arc:2.0, spin:true, fade:true });
-        /* ATTRIBUTION: the stormed player then draws 1 back — that draw is THEIR cast on THEIR angler, played after the scatter, so it never reads as the actor's draw going to the wrong side. */
-        later(1.35,function(){ startCast(O,{ tex:backTex }); });
+        later(0.35,function(){ doSplash(true); });
+        later(1.8,function(){ doSplashAt(O.position.x+(rnd(31)-0.5)*3,O.position.z+(rnd(47)-0.5)*3,true); });
+        later(3.25,function(){ doSplashAt(O.position.x+(rnd(53)-0.5)*3,O.position.z+(rnd(59)-0.5)*3,true); });
+        flyCard({ from:oPos, to:center, tex:backTex, dur:0.9, delay:0.55, arc:1.7, spin:true, fade:true });
+        flyCard({ from:oPos, to:center, tex:backTex, dur:0.9, delay:0.9, arc:2.0, spin:true, fade:true });
+        /* ATTRIBUTION: the stormed player then draws 1 back — that draw is THEIR cast on THEIR angler, played after the scatter, so it never reads as the actor's draw going to the wrong side. It now casts at 2.95s, as the third strike lands, instead of 1.35s into a 2.3s storm that was already over. */
+        later(2.95,function(){ startCast(O,{ tex:backTex }); });
         react(O,"sad",1.1); react(A,"wow",0.8);
         break;
       case "reel":
@@ -7006,21 +7047,37 @@ var SceneFX = (function(){
         // down around the card's entry point. Then the pole hauls the
         // fresh card back out of the water like normal.
         flyCard({ from:aPos, to:center, tex:backTex, dur:0.75, arc:1.5, fade:true, onArrive:function(){ doSplash(false); } });
+        /* FIX ROUND (Jenna, real play: "only 2 worms, lying on the
+           card's face"): all four worms now spawn IMMEDIATELY as
+           props — the stagger lives inside each prop's own clock, so
+           no timer chain can drop worms 3 and 4 — each arcs on its
+           own staggered beat (0 / 0.14 / 0.28 / 0.42s) to its own
+           landing point on a ring AROUND the tossed card's entry
+           point (radius ~1.05, never on the card), wriggling as it
+           flies, splashing down with its own ring, then settling.
+           The fresh card is hauled back out only after the last worm
+           is in (cast at 1.3s). */
         [0,1,2,3].forEach(function(wi){
-          later(wi*0.13,function(){
-            var worm=makeWormProp();
-            var wp=center.clone(); wp.x+=(wi-1.5)*0.55; wp.z+=(wi%2?0.5:-0.42); wp.y=0.25;
-            spawnProp(worm,0.85,function(k,m){
-              m.position.lerpVectors(aPos,wp,k);
-              m.position.y+=Math.sin(k*Math.PI)*1.7;
-              m.rotation.y=k*5+wi*1.7;
-              m.rotation.z=Math.sin(k*22+wi*2.1)*0.45; // the wriggle
-              if(k>0.9 && !m.userData.splashed){ m.userData.splashed=true; doSplashAt(wp.x,wp.z,false); }
-            });
+          var worm=makeWormProp(); worm.scale.setScalar(1.35);
+          worm.position.copy(aPos); if(wi>0) worm.visible=false;
+          var wang=wi*(Math.PI/2)+0.7;
+          var wp=new THREE.Vector3(center.x+Math.cos(wang)*1.05, 0.22, center.z+Math.sin(wang)*1.05);
+          var wDelay=wi*0.14, wDur=1.7;
+          spawnProp(worm,wDur,function(k,m){
+            var t2=k*wDur;
+            if(t2<wDelay){ m.visible=false; return; }
+            m.visible=true;
+            var u=Math.min((t2-wDelay)/0.8,1);
+            m.position.lerpVectors(aPos,wp,u);
+            m.position.y+=Math.sin(u*Math.PI)*1.9;
+            if(u>=1) m.position.y=wp.y-Math.min((t2-wDelay-0.8)*0.3,0.18); // settled in the water, sinking a touch
+            m.rotation.y=u*5+wi*1.7;
+            m.rotation.z=Math.sin(u*24+wi*2.1)*0.5; // the wriggle
+            if(u>=1 && !m.userData.splashed){ m.userData.splashed=true; doSplashAt(wp.x,wp.z,false); spawnRing(new THREE.Vector3(wp.x,0.06,wp.z),0xffffff,2.2); }
           });
         });
-        later(0.55,function(){ startCast(A,{ tex:drawnTex, dur:1.6, haulDur:0.8 }); });
-        if(ev.pairId) pairFlight(A,2.9);
+        later(1.3,function(){ startCast(A,{ tex:drawnTex, dur:1.6, haulDur:0.8 }); });
+        if(ev.pairId) pairFlight(A,3.6);
         break;
 
       case "peek":
@@ -7268,7 +7325,11 @@ var SceneFX = (function(){
         boatDomeT:(anglers.boat?anglers.boat.userData.domeT:null), boatDomeDur:(anglers.boat?anglers.boat.userData.domeDur:null),
         busy:animBusy(), goldieOrbit:goldieOrbit, luckyHover:luckyHover.length };
     },
-    trigger:trigger
+    trigger:trigger,
+    /* REMATCH SWEEP: full one-shot slate + trap buoy cleared when a
+       new game starts, so nothing from the finished game (a lingering
+       prop, the set-trap buoy, a mid-flight card) bleeds into it. */
+    resetForNewGame:function(){ if(!inited || failed) return; clearOneShotFx(); clearTrapBuoy(); }
   };
 })();
 </script>

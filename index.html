@@ -1752,6 +1752,7 @@ var wasMyTurn=false;
 var finishedSoundPlayed=false;
 var celebratedSeq=0;
 var prevPairCounts=null;
+var suppressDealCeleb=false; /* REMATCH SWEEP: set the moment a rematch is tapped (dropPendingPresentations) — the pair-count watcher in render() must not fire a deal-pair PAIR! celebration for the new game, whatever the stale counts say. Consumed (cleared) by that watcher on the start event it guards. */
 var pairOverlayTimer=null;
 var pc=null, dc=null, roomCode="", hostStatus="waiting", disconnected=false;
 
@@ -2212,6 +2213,15 @@ function clearPairCelebration(){
   if(els.pairOverlay) els.pairOverlay.classList.remove("show");
   if(pairOverlayTimer){ clearTimeout(pairOverlayTimer); pairOverlayTimer=null; }
   if(els.confettiLayer) els.confettiLayer.innerHTML="";
+  /* REMATCH SWEEP (Jenna, real play: "a display card still persists
+     into the new game"): celebratePair's flying display cards live on
+     document.body under their own WAAPI animations + fallback timers,
+     outside every layer the sweep used to clear — so a pair banked
+     just before the game ended could leave its display card hanging
+     over the new game. They are celebration artifacts: they die with
+     the celebration, here, on every sweep path. */
+  var fly=document.querySelectorAll(".fly-card");
+  for(var fi=0;fi<fly.length;fi++){ if(fly[fi].parentNode) fly[fi].parentNode.removeChild(fly[fi]); }
 }
 function celebratePair(v, ev){
   var pid = ev && ev.pairId ? ev.pairId : null;
@@ -2557,7 +2567,13 @@ function render(){
      (start event) get the same celebration for the newest banked pair. */
   (function(){
     var counts={ you:v.you.pairs.length, opp:v.opponent?v.opponent.pairs.length:0 };
-    if(prevPairCounts && ev && ev.kind==="start"){
+    /* REMATCH SWEEP: a start event that follows a Rematch tap never
+       gets a deal-pair celebration — the finished game's counts are
+       not a baseline for the new game, and its PAIR! banner must not
+       re-fire over the fresh deal (see dropPendingPresentations). */
+    var suppressStartCeleb=false;
+    if(ev && ev.kind==="start"){ suppressStartCeleb=suppressDealCeleb; suppressDealCeleb=false; }
+    if(prevPairCounts && ev && ev.kind==="start" && !suppressStartCeleb){
       if(counts.you>prevPairCounts.you) celebratePair(v, { actor:"you", pairId:v.you.pairs[v.you.pairs.length-1] });
       else if(counts.opp>prevPairCounts.opp) celebratePair(v, { actor:"opponent", pairId:v.opponent.pairs[v.opponent.pairs.length-1] });
     }
@@ -2913,6 +2929,20 @@ function dropPendingPresentations(){
   if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false);
   if(window.SceneFX && SceneFX.resetForNewGame) SceneFX.resetForNewGame();
   clearPairCelebration();
+  /* REMATCH SWEEP 2 (Jenna, real play: banner + display card + gold
+     confetti STILL persisted): three more leftovers die at the tap —
+     (1) the conversation strip's QUEUE: clearStrip() empties queued
+     old-game messages and kills the strip timer, so the new game
+     never opens under the finished game's words (it also re-runs the
+     deferred-drop + celebration sweep above, harmlessly);
+     (2) suppressDealCeleb: the pair-count watcher in render() must
+     not celebrate the new deal's banked pairs off the finished
+     game's counts. (The gold confetti itself is already emptied by
+     clearPairCelebration above and cannot respawn: the finished
+     view's spawn is latched by finishedSoundPlayed until a playing
+     view renders.) */
+  suppressDealCeleb=true;
+  clearStrip();
 }
 function requestRematch(){
   dropPendingPresentations();
@@ -4448,6 +4478,24 @@ var SceneFX = (function(){
     scene.add(g); trapBuoy=g;
   }
   function clearTrapBuoy(){ if(trapBuoy){ scene.remove(trapBuoy); trapBuoy=null; } }
+  /* BAIT SINGLE-INSTANCE (Jenna, real play: "two copies of the chosen
+     card appear — one at the pier, one at the boat"): the dangling bait
+     card must exist AT MOST once. Its line is added straight to the
+     scene (not via spawnProp), so nothing ever removed it early — a
+     second set, or a trap springing while its dangle was still up
+     (live play has no animBusy gate on the victim's timing), left the
+     old card + line hanging next to the new one. This sweeps any live
+     dangle card AND its line out of the scene and the prop list. */
+  function clearBaitDangle(){
+    for(var bi=fxProps.length-1;bi>=0;bi--){
+      var bm2=fxProps[bi].mesh;
+      if(bm2 && bm2.userData && bm2.userData.item4==="baitCard"){
+        if(bm2.userData.line){ try{ scene.remove(bm2.userData.line); }catch(e){} }
+        try{ scene.remove(bm2); }catch(e){}
+        fxProps.splice(bi,1);
+      }
+    }
+  }
   function makeMirrorProp(){
     var g=new THREE.Group();
     var frame=new THREE.Mesh(new THREE.TorusGeometry(0.62,0.07,8,24), mat(0x2fa3b8,{roughness:0.3,metalness:0.5})); frame.scale.y=1.3; g.add(frame);
@@ -4494,22 +4542,41 @@ var SceneFX = (function(){
        (y≈0.4) — the old bolt was only ~3.3 long and stopped mid-air
        well above its target. Thick near-white core, pale halo, two
        branch forks, and a glowing impact ball at the tip where it
-       lands. tick() holds each strike ~0.6-0.75s (see there). */
-    var g=new THREE.Group(); var bm=new THREE.MeshBasicMaterial({ color:0xfffbe8, transparent:true, opacity:0.98 });
+       lands. tick() holds each strike ~0.6-0.75s (see there).
+       FIX ROUND (Jenna, real play: "the bolt never appears" — verified
+       in a driven browser: boltMesh was visible, in-scene and correctly
+       positioned, yet nothing showed): the old bolt was ONE flat ribbon
+       in the XY plane standing at the angler's exact spot, so (a) from
+       the Top-down camera a flat vertical ribbon projects to a hairline,
+       and (b) at the angler's spot the near-opaque storm cloud (taller
+       than the bolt's top, transparent + depthWrite off, so it paints
+       OVER whatever is behind it) plus the boat hull/canopy swallowed
+       the whole span. Two structural fixes: the zigzag is built TWICE,
+       crossed at 90° around the vertical axis, so it has real width
+       from EVERY camera (top-down included); and every bolt mesh gets
+       renderOrder 20 so the bolt draws after — in front of — the cloud
+       instead of being painted over by it. tick() also aims the strike
+       at open water just off the target now (see the storm case), out
+       from behind the hull. */
+    var g=new THREE.Group(); var bm=new THREE.MeshBasicMaterial({ color:0xfffbe8, transparent:true, opacity:0.98, depthWrite:false });
     var halo=new THREE.MeshBasicMaterial({ color:0xffe98a, transparent:true, opacity:0.38, depthWrite:false });
+    var half=new THREE.Group();
     function boltSeg(x1,y1,x2,y2,coreW,haloW){
       var dx=x2-x1, dy=y2-y1, len=Math.sqrt(dx*dx+dy*dy);
       var hseg=new THREE.Mesh(new THREE.BoxGeometry(haloW,len+0.3,haloW), halo);
-      hseg.position.set((x1+x2)/2,(y1+y2)/2,0); hseg.rotation.z=Math.atan2(dx,-dy); g.add(hseg);
+      hseg.position.set((x1+x2)/2,(y1+y2)/2,0); hseg.rotation.z=Math.atan2(dx,-dy); half.add(hseg);
       var seg=new THREE.Mesh(new THREE.BoxGeometry(coreW,len+0.2,coreW), bm);
-      seg.position.set((x1+x2)/2,(y1+y2)/2,0); seg.rotation.z=Math.atan2(dx,-dy); g.add(seg);
+      seg.position.set((x1+x2)/2,(y1+y2)/2,0); seg.rotation.z=Math.atan2(dx,-dy); half.add(seg);
     }
     var pts=[[0,0],[0.55,-1.7],[-0.3,-3.2],[0.45,-4.8],[-0.05,-6.5]];
     for(var i=0;i<pts.length-1;i++) boltSeg(pts[i][0],pts[i][1],pts[i+1][0],pts[i+1][1],0.62,1.3);
     boltSeg(0.55,-1.7, 1.6,-3.0, 0.38,0.8);   // fork 1
     boltSeg(-0.3,-3.2, -1.45,-4.5, 0.38,0.8); // fork 2
+    g.add(half);
+    var half2=half.clone(); half2.rotation.y=Math.PI/2; g.add(half2); // the crossed twin: same zigzag in the ZY plane
     var tipGlow=new THREE.Mesh(new THREE.SphereGeometry(0.78,10,8), halo); tipGlow.position.set(-0.05,-6.5,0); g.add(tipGlow);
     var tipCore=new THREE.Mesh(new THREE.SphereGeometry(0.3,10,8), bm); tipCore.position.set(-0.05,-6.5,0); g.add(tipCore);
+    g.traverse(function(ch){ ch.renderOrder=20; }); // draw after the cloud/rain transparents, never painted over by them
     g.visible=false; return g;
   }
   function iceSpread(targetPos){
@@ -6237,8 +6304,10 @@ var SceneFX = (function(){
       if(boltT<STORM_DUR){
         boltT+=dt;
         // Storm Surge: the bolt strikes DOWN OUT OF the storm cloud
-        // straight onto the opponent (boltAt = the opponent's spot,
-        // where the cloud and rain already hang). VISIBILITY (Jenna,
+        // onto the water right at the opponent (boltAt = the open-
+        // water strike point just off the opponent — see the storm
+        // case in trigger() for why it no longer targets the angler's
+        // own spot). VISIBILITY (Jenna,
         // real play: "not a sub-second flash"): three strikes with
         // LONG holds — ~1.05s, ~1.05s, then ~1.25s — inside the 4.8s
         // storm window. The bolt body runs the full height from the
@@ -6349,7 +6418,7 @@ var SceneFX = (function(){
      springs, the game ends, or a new game starts. */
   function clearOneShotFx(){
     var i;
-    for(i=fxProps.length-1;i>=0;i--){ try{ scene.remove(fxProps[i].mesh); }catch(e){} }
+    for(i=fxProps.length-1;i>=0;i--){ try{ scene.remove(fxProps[i].mesh); }catch(e){} if(fxProps[i].mesh && fxProps[i].mesh.userData && fxProps[i].mesh.userData.line){ try{ scene.remove(fxProps[i].mesh.userData.line); }catch(e){} } }
     fxProps.length=0;
     for(i=flights.length-1;i>=0;i--){ try{ scene.remove(flights[i].obj); }catch(e){} }
     flights.length=0;
@@ -6752,7 +6821,8 @@ var SceneFX = (function(){
           // card flies face-up on a slow, clearly visible arc (or the
           // victim casts, on a miss).
           clearTrapBuoy();
-          var trapBase=A.position.clone().add(new THREE.Vector3(0,0.1, A.position.z>0 ? -2.2 : 2.2));
+          clearBaitDangle(); // SINGLE-INSTANCE: if the set dangle is somehow still up (live timing), it dies before the snap card pops — never two copies of the card
+          var trapBase=A.position.clone().add(new THREE.Vector3(0,0.1, A.position.z>0 ? -3.1 : 3.1)); // same 3.1 spot the dangle hung over and the buoy marks
           doSplashAt(trapBase.x,trapBase.z,true);
           spawnRing(new THREE.Vector3(trapBase.x,0.06,trapBase.z),0xffcf4d,4.2);
           var snapCard=makeCardObj(backTex);
@@ -6777,26 +6847,35 @@ var SceneFX = (function(){
           // (splash + ring going in, splash + ring coming back out),
           // then a second swinging HOLD ~1.9s — before the red buoy
           // marks the set trap until it springs.
-          var trapSpot=O.position.clone().add(new THREE.Vector3(0,0, O.position.z>0 ? -2.4 : 2.4));
+          /* SINGLE-INSTANCE + OPEN WATER (Jenna, real play: "two copies
+             of the chosen card" + "it never dips"): any earlier dangle
+             (card + line) is swept first, so this card is the ONLY one;
+             and the spot moves from 2.4 to 3.1 units off the foe —
+             clear of the boat's hull / pier edge, over open water,
+             where a dip can actually be seen instead of sliding down
+             the side of the boat. */
+          var trapSpot=O.position.clone().add(new THREE.Vector3(0,0, O.position.z>0 ? -3.1 : 3.1));
+          clearBaitDangle();
           clearTrapBuoy();
           var baitTex = ev.mateId ? frontTexFor(ev.mateId.slice(0,-1) + mateSuitOf(ev.mateId.slice(-1))) : backTex; // the dangling card is the setter's chosen card = the mate of the rigged ask target
           var baitCard=makeCardObj(baitTex); baitCard.userData.item4="baitCard";
           var baitLine=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,1,6), new THREE.MeshBasicMaterial({ color:0xfff0b3 }));
           baitLine.castShadow=false; scene.add(baitLine);
-          var hangPos=new THREE.Vector3(trapSpot.x, 2.6, trapSpot.z);
+          baitCard.userData.line=baitLine; // so clearBaitDangle / clearOneShotFx can sweep the line with the card
+          var hangPos=new THREE.Vector3(trapSpot.x, 2.75, trapSpot.z);
           spawnProp(baitCard,6.4,function(k,m){
             if(k<0.14){ var u0=easeOut(k/0.14); m.position.lerpVectors(aPos,hangPos,u0); }
             else {
               m.position.copy(hangPos);
               m.position.y += Math.sin((k-0.14)*Math.PI*2.6)*0.13;
-              if(k>0.52 && k<0.70){ var dk=(k-0.52)/0.18; m.position.y -= Math.sin(dk*Math.PI)*2.75; } // THE DIP: centre drops to ~-0.15, so the card's lower half is under the surface
+              if(k>0.50 && k<0.72){ var dk=(k-0.50)/0.22; m.position.y -= Math.sin(dk*Math.PI)*3.3; } // THE DIP: centre drops to ~-0.55 — the card (half-height 1.6) is under the surface well past its lower half, for a full ~1.4s
             }
             m.rotation.z=Math.sin(k*Math.PI*5)*0.3;
             m.rotation.y=(seat===0?0:Math.PI)+Math.sin(k*2.4)*0.6; // slow turn around the camera-facing yaw: the face catches the viewer, then the back, then the face again
             var cardTop=m.position.clone(); cardTop.y+=1.5;
             setLineSeg(baitLine, aPos, cardTop);
-            if(k>0.545 && !m.userData.dipIn){ m.userData.dipIn=true; doSplashAt(trapSpot.x,trapSpot.z,false); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.6); }
-            if(k>0.685 && !m.userData.dipOut){ m.userData.dipOut=true; doSplashAt(trapSpot.x,trapSpot.z,false); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.0); }
+            if(k>0.525 && !m.userData.dipIn){ m.userData.dipIn=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,4.4); }
+            if(k>0.70 && !m.userData.dipOut){ m.userData.dipOut=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.8); }
             if(k>0.965 && !m.userData.buoyed){ m.userData.buoyed=true; makeTrapBuoy(trapSpot.x,trapSpot.z); }
             if(k>=0.999 && baitLine.parent) scene.remove(baitLine);
           });
@@ -6880,7 +6959,18 @@ var SceneFX = (function(){
         break;
 
       case "storm":
-        stormT=STORM_DUR; boltT=0; boltAt={ x:O.position.x, z:O.position.z }; whirlBoost=3; doSplash(true);
+        /* STRIKE POINT (Jenna, real play: "no bolt ever appears" — see
+           makeBolt): the bolt used to strike at the target angler's
+           exact x,z — inside the boat (hull + canopy in front of its
+           whole lower span) or inside the cloud blob at the pier. The
+           strike now lands on OPEN WATER ~38% of the way from the
+           target toward the whirlpool: still unmistakably a strike ON
+           that player (it lands right at their bow / pier end, with
+           the impact splash + ring there), but the full cloud-to-water
+           bolt stands in clear air and reads from every camera. The
+           cloud and rain stay over the angler, unchanged. */
+        var strikePt=new THREE.Vector3(O.position.x,0,O.position.z).lerp(new THREE.Vector3(0,0,0),0.38);
+        stormT=STORM_DUR; boltT=0; boltAt={ x:strikePt.x, z:strikePt.z }; whirlBoost=3; doSplash(true);
         // FIX ROUND (Jenna, real play: "the cloud, rain and bolt do not
         // appear at all"): the whole storm now runs STORM_DUR (4.8s).
         // The cloud is BIG (9 fat spheres at 1.5x prop scale), hangs
@@ -7053,16 +7143,26 @@ var SceneFX = (function(){
            no timer chain can drop worms 3 and 4 — each arcs on its
            own staggered beat (0 / 0.14 / 0.28 / 0.42s) to its own
            landing point on a ring AROUND the tossed card's entry
-           point (radius ~1.05, never on the card), wriggling as it
-           flies, splashing down with its own ring, then settling.
-           The fresh card is hauled back out only after the last worm
-           is in (cast at 1.3s). */
+           point, wriggling as it flies, splashing down with its own
+           ring, then settling. The fresh card is hauled back out only
+           after the last worm is in (cast at 1.3s).
+           FIX ROUND 2 (Jenna, real play: "only 3 visible, lying across
+           the card" — verified in a driven browser: all four worms DID
+           land, but on a 1.05-radius ring — INSIDE the tossed card's
+           own footprint (a flight card is ~2.3 wide) and inside the
+           whirlpool's bright foam core, where they merged into one
+           pink smudge at the splash): the ring is now radius 2.1 —
+           clear of the card on every side and out of the foam core —
+           the worms are bigger (1.55x) and ride ON the surface
+           (y≈0.3, settling only a whisper) instead of sinking into
+           the foam, and the prop lives 2.4s so all four sit settled
+           and separately readable for a full beat together. */
         [0,1,2,3].forEach(function(wi){
-          var worm=makeWormProp(); worm.scale.setScalar(1.35);
+          var worm=makeWormProp(); worm.scale.setScalar(1.55);
           worm.position.copy(aPos); if(wi>0) worm.visible=false;
           var wang=wi*(Math.PI/2)+0.7;
-          var wp=new THREE.Vector3(center.x+Math.cos(wang)*1.05, 0.22, center.z+Math.sin(wang)*1.05);
-          var wDelay=wi*0.14, wDur=1.7;
+          var wp=new THREE.Vector3(center.x+Math.cos(wang)*2.1, 0.3, center.z+Math.sin(wang)*2.1);
+          var wDelay=wi*0.14, wDur=2.4;
           spawnProp(worm,wDur,function(k,m){
             var t2=k*wDur;
             if(t2<wDelay){ m.visible=false; return; }
@@ -7070,10 +7170,10 @@ var SceneFX = (function(){
             var u=Math.min((t2-wDelay)/0.8,1);
             m.position.lerpVectors(aPos,wp,u);
             m.position.y+=Math.sin(u*Math.PI)*1.9;
-            if(u>=1) m.position.y=wp.y-Math.min((t2-wDelay-0.8)*0.3,0.18); // settled in the water, sinking a touch
+            if(u>=1) m.position.y=wp.y-Math.min((t2-wDelay-0.8)*0.12,0.07); // settled ON the surface, riding it — never sunk into the foam
             m.rotation.y=u*5+wi*1.7;
             m.rotation.z=Math.sin(u*24+wi*2.1)*0.5; // the wriggle
-            if(u>=1 && !m.userData.splashed){ m.userData.splashed=true; doSplashAt(wp.x,wp.z,false); spawnRing(new THREE.Vector3(wp.x,0.06,wp.z),0xffffff,2.2); }
+            if(u>=1 && !m.userData.splashed){ m.userData.splashed=true; doSplashAt(wp.x,wp.z,false); spawnRing(new THREE.Vector3(wp.x,0.06,wp.z),0xffffff,2.6); }
           });
         });
         later(1.3,function(){ startCast(A,{ tex:drawnTex, dur:1.6, haulDur:0.8 }); });

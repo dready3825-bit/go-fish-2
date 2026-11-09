@@ -234,6 +234,13 @@
   #intelBar h3{margin:0 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)}
   #intelBar .intel-line{font-size:14px;margin:4px 0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
   .mini-cards{display:inline-flex;gap:4px;flex-wrap:wrap}
+  #drawNote{margin:0 0 9px;padding:8px 11px;border-radius:10px;background:linear-gradient(160deg,#ffd76e,#f5a524);color:#3a2403;font-weight:800;font-size:14.5px;line-height:1.35}
+  .peek-cards{display:inline-flex;gap:8px;flex-wrap:wrap;align-items:flex-start}
+  .peek-cards .pcard.peek-card{width:68px;height:96px;flex:none}
+  .peek-cards .pcard.peek-card .r{font-size:19px}
+  .peek-cards .pcard.peek-card .mid{font-size:37px}
+  .peek-names{font-size:15.5px}
+  .intel-line.peek-line{align-items:flex-start}
   /* ---------- Hand ---------- */
   .hand-panel{
     position:relative;
@@ -708,6 +715,7 @@
             <h2 id="handTitle">Your hand</h2>
             <span class="hand-hint" id="handHint"></span>
           </div>
+          <div id="drawNote" style="display:none"></div>
           <div id="modPanel"></div>
           <div id="handRow"></div>
           <div id="layRow" style="margin-top:10px;display:none">
@@ -1461,7 +1469,7 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
       var oppPaired=extractPairs(st,(1-who)); sortHand(opp);
       pushLog(st, "Storm Surge scattered "+lostN+" cards from "+possLow(oppName)+" hand into the pond — they fished "+backTotal+" back!","sys");
       var e8=evBase("storm",{ count:lostN, text:"Storm Surge! Lightning scattered "+lostN+" of "+possLow(oppName)+" cards into the pond — they fished "+backTotal+" back"+(oppPaired.length?" and paired the "+pairLabel(oppPaired[0]):"")+(oppPaired.length?"!":".") });
-      Object.assign(e8,pairFields(oppPaired)); setEvent(st,e8); break;
+      Object.assign(e8,pairFields(oppPaired)); if(oppPaired.length) e8.pairOwner=1-who; /* ATTRIBUTION FIX: this pair was banked by the stormed player (the opponent of the actor) from their redraw — never credit it to the actor in the view, the strip, or the pair celebration. */ setEvent(st,e8); break;
     }
     case "monster": {
       var i9=Math.floor(Math.random()*me.hand.length); var eaten=me.hand.splice(i9,1)[0];
@@ -1717,7 +1725,7 @@ function buildView(st,seat,meta){
     lastEvent: ev ? { kind:ev.kind, actor: ev.actor===seat ? "you" : "opponent", rank:ev.rank, count:ev.count,
       askText: ev.askText||null, mateId: ev.mateId||null,
       drawnCard: drawnCard, drawnMod: ev.actor===seat ? (ev.drewMod||null) : null,
-      drew: ev.drawnCardId!=null || ev.drewMod!=null, goldieWhere: ev.goldieWhere||null, keptId: ev.actor===seat ? (ev.keptId||null) : null, blockedBy: ev.blockedBy||null, pairRank: ev.pairRank, pairId: ev.pairId, text: ev.text, seq: ev.seq } : null
+      drew: ev.drawnCardId!=null || ev.drewMod!=null, pairOwner: ev.pairOwner==null ? null : (ev.pairOwner===seat ? "you" : "opponent"), goldieWhere: ev.goldieWhere||null, keptId: ev.actor===seat ? (ev.keptId||null) : null, blockedBy: ev.blockedBy||null, pairRank: ev.pairRank, pairId: ev.pairId, text: ev.text, seq: ev.seq } : null
   };
 }
 
@@ -1825,7 +1833,7 @@ function $(id){ return document.getElementById(id); }
 var els = {};
 ["lobby","game","nameInput","lobbyMsg","soloBtn","createBtn","modeChip","turnBanner","pondChip","muteBtn","leaveBtn",
  "sceneWrap","oppChip","convoStrip","hudTop","hudBottom","waitPanel","cancelWaitBtn",
- "oppPile","youPile","intelBar","intelLines","modPanel","luckyPanel","handTitle","handHint","handRow","layRow","layBtn",
+ "oppPile","youPile","intelBar","intelLines","modPanel","luckyPanel","handTitle","handHint","handRow","layRow","layBtn","drawNote",
  "logList","toast","modListHow",
  "hostPanel","hostCode","hostHint","hostStatus","hostRetryBtn","copyCodeBtn","cancelHostBtn",
  "joinCodeInput","joinBtn","waitCode","waitText","waitStatus","waitError","retryWaitBtn",
@@ -1878,6 +1886,13 @@ function renderPile(el,name,pairs,yours){
 function miniCard(c){
   return '<span class="pair-chip '+(isRed(c.suit)?"red":"black")+'">'+esc(c.rank)+" "+SUIT_GLYPH[c.suit]+"</span>";
 }
+function fullCardName(c){ var sn=SUIT_NAME[c.suit]||""; return c.rank+" of "+sn.charAt(0).toUpperCase()+sn.slice(1); }
+function peekCardHtml(c){
+  /* PEEK READABILITY: revealed cards render at FULL hand-card size with
+     a big centre suit and the full name beside them — never the tiny
+     pair-chip — so each card is identifiable at a glance. */
+  return '<span class="pcard peek-card'+(isRed(c.suit)?" red":"")+'"><span class="r">'+esc(c.rank)+" "+SUIT_GLYPH[c.suit]+'</span><span class="mid">'+SUIT_GLYPH[c.suit]+'</span><span class="r bot">'+esc(c.rank)+" "+SUIT_GLYPH[c.suit]+"</span></span>";
+}
 function bubblesFor(ev,v){
   if(!v || !ev) return {};
   var out={};
@@ -1921,7 +1936,7 @@ function bubblesFor(ev,v){
       break;
     case "blocked": set(ev.actor, ev.blockedBy==="anchor" ? "Blocked! ⚓" : "Blocked! 🛡️"); break;
     default:
-      if(ev.pairId){ set(ev.actor, "Pair — "+pairLabel(ev.pairId)+"! 🎉"); }
+      if(ev.pairId){ set(ev.pairOwner||ev.actor, "Pair — "+pairLabel(ev.pairId)+"! 🎉"); }
       else if(KIND_TO_MOD[ev.kind]){ var inf=MODIFIER_INFO[KIND_TO_MOD[ev.kind]]; set(ev.actor, inf.icon+" "+inf.name+"!"); }
       break;
   }
@@ -2317,7 +2332,7 @@ function clearPairCelebration(){
 }
 function celebratePair(v, ev){
   var pid = ev && ev.pairId ? ev.pairId : null;
-  var yours = ev ? ev.actor==="you" : true;
+  var yours = ev ? (ev.pairOwner ? ev.pairOwner==="you" : ev.actor==="you") : true; /* ATTRIBUTION FIX: a Storm Surge redraw pair belongs to the stormed player, not the mod's actor — celebrate (and fly) it for its real owner. */
   if(!pid){
     var arr = yours ? v.you.pairs : (v.opponent?v.opponent.pairs:[]);
     pid = arr[arr.length-1];
@@ -2369,7 +2384,9 @@ function celebratePair(v, ev){
   /* Two cards visibly fly from the hand area into that player's pair pile */
   try{
     if(pileEl && els.handRow && !window.matchMedia("(prefers-reduced-motion: reduce)").matches){
-      var from=els.handRow.getBoundingClientRect(), to=pileEl.getBoundingClientRect();
+      /* ATTRIBUTION FIX: the flying pair cards launch from the pair OWNER's side — yours from your hand row, the opponent's from their chip at the top. Launching every pair from your hand row made the Computer's pairs look like cards flying out of YOUR hand into his pile. */
+      var fromEl = yours ? els.handRow : (els.oppChip||els.handRow);
+      var from=fromEl.getBoundingClientRect(), to=pileEl.getBoundingClientRect();
       var rank=pairRankFromId(pid), col=pairColorFromId(pid);
       var glyphs = col==="red" ? ["♥","♦"] : ["♣","♠"];
       for(var i=0;i<2;i++){
@@ -2479,7 +2496,7 @@ function render(){
   els.waitPanel.style.display = "none";
   /* intel */
   var lines=[];
-  if(v.you.peeked && v.you.peeked.length) lines.push('<div class="intel-line">🔭 <b>Peeked:</b> <span class="mini-cards">'+v.you.peeked.map(miniCard).join("")+"</span></div>");
+  if(v.you.peeked && v.you.peeked.length) lines.push('<div class="intel-line peek-line">🔭 <b>Peeked cards:</b> <span class="peek-cards">'+v.you.peeked.map(peekCardHtml).join("")+'</span> <b class="peek-names">'+v.you.peeked.map(fullCardName).join(" · ")+"</b></div>");
   if(v.you.sonar) lines.push('<div class="intel-line">📡 <b>Sonar:</b> '+(v.you.sonar.mate
     ? ((opp?esc(opp.name):"They")+(v.you.sonar.count>0 ? " <b>holds</b> the <b>"+esc(v.you.sonar.mate)+"</b> — the exact mate you pinged for. Tap your card and ask for it!" : " does <b>not</b> hold the <b>"+esc(v.you.sonar.mate)+"</b> — the exact mate (same number + same color) you pinged for."))
     : ((opp?esc(opp.name):"They")+" hold"+(v.you.sonar.count===1?"s":"")+" <b>"+v.you.sonar.count+"</b> of rank <b>"+esc(v.you.sonar.rank)+"</b>."))+"</div>");
@@ -2521,6 +2538,24 @@ function render(){
       els.handHint.textContent="One action this turn: tap a fish card to ask · or tap a ★ Mod card to play it (a mod uses your turn).";
       els.handHint.className="hand-hint";
     }
+  }
+  /* DRAW DESTINATION NOTE: every card you draw or fish for — a Go Fish
+     haul or any draw modifier (Double Cast, Chum Bucket, Deep Scope,
+     Net Cast, Lucky Lure, Pond Monster, Rip Current, Swap Bait, Blind
+     Snatch, Magnet Hook, Goldie's Gift) — lands in YOUR hand, or in
+     YOUR pair pile when it pairs. Say so, naming the card, in the same
+     render that moves it, so a draw can never read as feeding the
+     opponent (whose own separate turn-start draw is a different card). */
+  if(els.drawNote){
+    var dnText="", dnEv=v.lastEvent;
+    if(dnEv && dnEv.actor==="you" && v.phase==="playing"){
+      if(dnEv.kind==="reel" && dnEv.pairId) dnText="🪝 Reel In — the "+pairLabel(dnEv.pairId)+" moved from their pile into YOUR pair pile.";
+      else if(dnEv.drawnCard && dnEv.pairId) dnText="🎉 The "+cardFace(dnEv.drawnCard)+" completed your "+pairLabel(dnEv.pairId)+" — banked in YOUR pair pile.";
+      else if(dnEv.drawnCard) dnText="🎣 Your card: the "+cardFace(dnEv.drawnCard)+" — it is in YOUR hand now.";
+      else if(dnEv.drewMod) dnText="🎣 Your draw: the "+(MODIFIER_INFO[dnEv.drewMod]?MODIFIER_INFO[dnEv.drewMod].name:dnEv.drewMod)+" modifier — it is in YOUR hand now (the ★ Mod card).";
+    }
+    els.drawNote.style.display = dnText ? "block" : "none";
+    if(dnText) els.drawNote.textContent = dnText;
   }
   var myTurnActive = v.yourTurn && v.phase==="playing" && !busy && !thinking && !(v.you.luckyChoice && v.you.luckyChoice.length);
   var html="";
@@ -6844,6 +6879,8 @@ var SceneFX = (function(){
         later(1.1,function(){ doSplashAt((rnd(31)-0.5)*5,(rnd(47)-0.5)*5,true); });
         flyCard({ from:oPos, to:center, tex:backTex, dur:0.9, delay:0.35, arc:1.7, spin:true, fade:true });
         flyCard({ from:oPos, to:center, tex:backTex, dur:0.9, delay:0.6, arc:2.0, spin:true, fade:true });
+        /* ATTRIBUTION: the stormed player then draws 1 back — that draw is THEIR cast on THEIR angler, played after the scatter, so it never reads as the actor's draw going to the wrong side. */
+        later(1.35,function(){ startCast(O,{ tex:backTex }); });
         react(O,"sad",1.1); react(A,"wow",0.8);
         break;
       case "reel":
@@ -7021,10 +7058,10 @@ var SceneFX = (function(){
         });
         var peekObjs=peekCards.map(function(pc){
           var pcard=makeCardObj(frontTexFor(pc.id));
-          pcard.scale.setScalar(1.9);
+          pcard.scale.setScalar(2.7); /* PEEK READABILITY: fanned cards at full flight size (was 1.9) and held ~3.6s, so rank + suit can actually be read across the pond. */
           return pcard;
         });
-        later(1.0,function(){ fanCardsUp(peekObjs,oPos,2.4); });
+        later(1.0,function(){ fanCardsUp(peekObjs,oPos,3.6); });
         react(A,"wow",0.9);
         break;
       case "sonar":

@@ -253,6 +253,7 @@
   .hand-hint.armed{color:var(--accent-strong);font-weight:800}
   #handRow{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}
   .card-btn{background:none;border:none;padding:0;border-radius:10px;line-height:0}
+  .card-btn.bait-out{visibility:hidden} /* BAIT HAND SYNC: the Bait & Switch card is out on the line — its hand copy hides (layout untouched) so only the dangling copy exists */
   .card-btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
   .card-btn.targetable{animation:pulse 1s ease-in-out infinite}
   @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(245,165,36,0)}50%{box-shadow:0 0 0 4px rgba(245,165,36,.65)}}
@@ -638,7 +639,7 @@
       <button class="btn btn-primary btn-block" id="soloBtn">🎣 Play vs the Computer</button>
       <button class="btn btn-block" id="installBtn" style="display:none">📲 How to install</button>
       <div id="liveNotice" role="status"></div>
-      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v17</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v18</div>
       <div class="divider">Play a friend live</div>
       <p style="font-size:13.5px;color:var(--ink-soft);margin:4px 2px 10px;line-height:1.55;text-align:left">Send your friend this app's link — https://dready3825-bit.github.io/go-fish-2/ — they can install it too. One of you taps <b>Create a room</b> and gets a short 6-letter code — tell your friend the code, they type it in below and tap <b>Join room</b>. That's it — no long codes to copy and paste.</p>
 
@@ -2472,7 +2473,8 @@ function render(){
   var html="";
   v.you.hand.forEach(function(c){
     var glow = ""; // ITEM 4 (Mate Sense): the pink hand-glow is gone - the matching cards lift/fan in the 3D scene instead.
-    html += '<button class="card-btn'+(armed&&myTurnActive?" targetable":"")+'" data-fish="'+esc(c.id)+'" '+(myTurnActive?"":"disabled")+' aria-label="Ask for the '+esc(mateFace(c))+" — the other "+colorOf(c.suit)+" "+esc(c.rank)+" (your "+esc(c.rank)+" of "+SUIT_NAME[c.suit]+")"+'">'
+    var baitOut = !!(window.SceneFX && SceneFX.baitDangleCardId && SceneFX.baitDangleCardId()===c.id); // BAIT HAND SYNC: while this card dangles on the Bait & Switch line, its hand copy is hidden — only one copy on screen
+    html += '<button class="card-btn'+(armed&&myTurnActive?" targetable":"")+(baitOut?" bait-out":"")+'" data-fish="'+esc(c.id)+'" '+(myTurnActive?"":"disabled")+' aria-label="Ask for the '+esc(mateFace(c))+" — the other "+colorOf(c.suit)+" "+esc(c.rank)+" (your "+esc(c.rank)+" of "+SUIT_NAME[c.suit]+")"+'">'
       + '<span class="pcard'+(isRed(c.suit)?" red":"")+glow+'"><span class="r">'+esc(c.rank)+" "+SUIT_GLYPH[c.suit]+'</span><span class="mid">'+SUIT_GLYPH[c.suit]+'</span><span class="r bot">'+esc(c.rank)+" "+SUIT_GLYPH[c.suit]+"</span></span></button>";
   });
   v.you.modifiers.forEach(function(m){
@@ -2847,7 +2849,8 @@ function releaseBusyWhenFxDone(){
        cast/flight that carries the action has landed by then, the
        tail (pair flight to the pile, bursts, rings) keeps playing
        visually, and the hand unlocks as soon as the player can act. */
-    if(fxFramesSince(busyReleaseStartFrame,busyReleaseStartWall)<150){ setTimeout(releaseBusyWhenFxDone, 120); return; }
+    var relCap = (window.SceneFX && SceneFX.baitDangling && SceneFX.baitDangling()) ? 660 : 150; /* BAIT DANGLE: same spring protection when the COMPUTER set the trap — checkBait() below springs it the moment this lock clears, so the release waits out the full dangle (see waitForStripThenCpu) */
+    if(fxFramesSince(busyReleaseStartFrame,busyReleaseStartWall)<relCap){ setTimeout(releaseBusyWhenFxDone, 120); return; }
   }
   busyReleaseStartFrame=0; busyReleaseStartWall=0;
   busy=false;
@@ -2909,6 +2912,16 @@ function waitForStripThenCpu(){
      effect's tail is still playing is safe: trigger() never wipes
      live FX, so the two overlap briefly and both read clearly. */
   var fxCap = chain ? 45 : 150;
+  /* BAIT DANGLE (Jenna, real play: the dips were never seen): while a
+     Bait & Switch dangle is live, the trap must NOT spring — the
+     normal cap is wall-clock (~2.5s) but scene time runs 1/60 per
+     rendered frame, so on a sub-60fps display the spring fired at
+     ~1.25–2.5 game-seconds and killed the dangle before its dips.
+     The cap rises to 660 frame-equivalents (~11s wall, a hard bound)
+     so the gate waits out the full 3 game-second dangle at any
+     realistic frame rate; animBusy() still ends the wait the moment
+     the dangle actually finishes. */
+  if(window.SceneFX && SceneFX.baitDangling && SceneFX.baitDangling()) fxCap = Math.max(fxCap, 660);
   var stripOk = chain
     ? (stripQueue.length<=2 && (!stripShownAt || (Date.now()-stripShownAt)>=300))
     : stripGateClear();
@@ -3418,7 +3431,20 @@ var SceneFX = (function(){
        boat canopy at the viewport top — corrected down to 0.085/0.03.
        FOVs unchanged; no new lights, meshes or draw calls. */
     top:   { base:[0,17.25,20.0], tgt:[0,-0.6,3.0], fov:76, vo:0.085 },
-    angled:{ base:[0,17.0,23.12], tgt:[0,-0.6,4.5], fov:63, vo:0.03 },
+    /* STORM FRAME PASS (Jenna, real play: "in the default Angled view
+       the boat is cut off at the top edge, so a cloud above it would be
+       off-frame anyway"): measured in the live probe at 390x844, the
+       boat canopy top sat only ~33px (~4.5% of the canvas) below the
+       canvas top — the storm cloud (top at world y≈8) projected at /
+       over the edge and only its glow showed. Angled now pulls back
+       x~1.065 along the same view direction and aims a touch further
+       north (tgt z 4.5 -> 3.9): the pull-back contracts the whole
+       pier-to-boat span toward the aim point (boat top drops, pier
+       feet rise), the aim shift drops the far side a little more, so
+       the boat + the storm zone above it sit comfortably inside the
+       frame while her angler still clears the bottom cluster. Top /
+       Low untouched; FOV and vo unchanged. */
+    angled:{ base:[0,18.1,24.62], tgt:[0,-0.6,3.9], fov:63, vo:0.03 },
     low:   { base:[0,4.32,22.7],  tgt:[0,0.0,2.0],  fov:57, vo:0.04 }
   };
   var wrapAspect=1, wrapW=0, wrapHpx=0;
@@ -3458,6 +3484,7 @@ var SceneFX = (function(){
   var STORM_DUR=4.8; // FIX ROUND (Jenna, real play): the storm runs 4.8s (was 2.3s) — cloud, rain and all three long-hold bolt strikes live inside this one window; tick(), animBusy() and clearExpiredFx() all read it.
   var fxProps=[], boltMesh=null, boltT=9, boltAt=null;
   var baitDangleGen=0; /* BAIT SINGLE-INSTANCE, generation guard: bumped by every clearBaitDangle()/clearOneShotFx(). A dangle prop whose spawn was DEFERRED by the spawnProp backlog is not in fxProps yet, so the sweep cannot see it — the generation is how a superseded dangle recognises itself the moment its fn first runs and removes itself instead of becoming the second copy Jenna saw. */
+  var baitDangleCard=null; /* BAIT HAND SYNC (Jenna, real play: "the same card was still fully visible in my hand at the same time — TWO copies on screen at once"): the id of the setter's chosen card while its dangle is live. The game rules keep that card in the setter's hand (the trap references its mate), so the HAND copy is hidden for exactly the dangle's life — set when the dangle is created, cleared when it ends, is swept, or the trap springs — leaving the dangling card as the ONLY copy on screen. render() reads baitDangleCardId() so a mid-dangle re-render keeps it hidden; syncBaitHand() covers the gap between the trigger and the next render. */
   var boatGroup=null, prop=null;
   var trapBuoy=null, lastTurnSet=null, anchorChain=null; // ANIM PASS: persistent bait buoy + turn-change guard + anchor chain
   var backTex=null;
@@ -4521,8 +4548,20 @@ var SceneFX = (function(){
      (live play has no animBusy gate on the victim's timing), left the
      old card + line hanging next to the new one. This sweeps any live
      dangle card AND its line out of the scene and the prop list. */
+  /* BAIT HAND SYNC: hide the dangling card's button in the DOM hand
+     (visibility only — the hand's layout never moves) and restore
+     every other card. Safe on any client: only the setter's own hand
+     contains that exact card id, so on the opponent's screen this is
+     a no-op. */
+  function syncBaitHand(){
+    var row=document.getElementById("handRow"); if(!row) return;
+    var btns=row.querySelectorAll("[data-fish]");
+    for(var bi2=0;bi2<btns.length;bi2++){ btns[bi2].classList.toggle("bait-out", !!baitDangleCard && btns[bi2].getAttribute("data-fish")===baitDangleCard); }
+  }
+  function setBaitDangleCard(id){ baitDangleCard=id||null; syncBaitHand(); }
   function clearBaitDangle(){
     baitDangleGen++; // invalidate any dangle whose spawn is still queued in the spawnProp backlog — it will find its generation stale and remove itself on its first frame (see the bait case in trigger())
+    setBaitDangleCard(null); // the dangle is gone (swept / sprung / superseded) — the hand copy comes back
     for(var bi=fxProps.length-1;bi>=0;bi--){
       var bm2=fxProps[bi].mesh;
       if(bm2 && bm2.userData && bm2.userData.item4==="baitCard"){
@@ -6341,19 +6380,19 @@ var SceneFX = (function(){
         boltT+=dt;
         // Storm Surge: the bolt strikes DOWN OUT OF the storm cloud
         // onto the water right at the opponent (boltAt = the open-
-        // water strike point just off the opponent — see the storm
-        // case in trigger() for why it no longer targets the angler's
-        // own spot). VISIBILITY (Jenna,
+        // water strike point under the storm cloud over the target's
+        // bow — see the storm case in trigger()). VISIBILITY (Jenna,
         // real play: "not a sub-second flash"): three strikes with
         // LONG holds — ~1.05s, ~1.05s, then ~1.25s — inside the 4.8s
         // storm window. The bolt body runs the full height from the
-        // cloud (its top sits at y≈6.3, inside the cloud cluster) down
-        // to the water at the opponent (tip at y≈-0.2). Each fresh
+        // cloud (its top sits at y≈5.9, inside the lowered cloud
+        // cluster) down to the water at the strike point (tip glow
+        // breaking the surface at y≈-0.6). Each fresh
         // strike re-aims with a small jitter and lands with a splash +
         // ring at the opponent so the eye is drawn to where it hit.
         var strike=(boltT>0.30&&boltT<1.50)||(boltT>1.80&&boltT<3.00)||(boltT>3.30&&boltT<4.60); // HOLD PASS (Jenna, real play): each strike now holds ~1.2-1.3s — at phone frame rates a ~1s hold could land between two glance-aways; three long holds inside the 4.8s window cannot all be missed
         if(strike && !boltMesh.visible){
-          boltMesh.position.set((boltAt?boltAt.x:0)+(rnd(Math.floor(boltT*997)+11)-0.5)*1.3, 6.3, (boltAt?boltAt.z:0)+(rnd(Math.floor(boltT*613)+29)-0.5)*1.3);
+          boltMesh.position.set((boltAt?boltAt.x:0)+(rnd(Math.floor(boltT*997)+11)-0.5)*1.3, 5.9, (boltAt?boltAt.z:0)+(rnd(Math.floor(boltT*613)+29)-0.5)*1.3);
           if(boltAt){ doSplashAt(boltAt.x,boltAt.z,false); spawnRing(new THREE.Vector3(boltAt.x,0.06,boltAt.z),0xfff3a0,3.4); }
         }
         boltMesh.visible=strike;
@@ -6455,6 +6494,7 @@ var SceneFX = (function(){
   function clearOneShotFx(){
     var i;
     baitDangleGen++; // a queued bait dangle from the old game must not spawn into the new one (see clearBaitDangle)
+    setBaitDangleCard(null); // a new game restores the hand copy too — no card stays hidden across games
     for(i=fxProps.length-1;i>=0;i--){ try{ scene.remove(fxProps[i].mesh); }catch(e){} if(fxProps[i].mesh && fxProps[i].mesh.userData && fxProps[i].mesh.userData.line){ try{ scene.remove(fxProps[i].mesh.userData.line); }catch(e){} } }
     fxProps.length=0;
     for(i=flights.length-1;i>=0;i--){ try{ scene.remove(flights[i].obj); }catch(e){} }
@@ -6624,7 +6664,7 @@ var SceneFX = (function(){
     // Storm Surge: a dark storm cloud - a cluster of dark-grey spheres,
     // same technique as the fog blobs, from the existing primitives.
     var g=new THREE.Group();
-    var cols=[0x36363e,0x42424a,0x2e2e34,0x3c3c44];
+    var cols=[0x474754,0x51515e,0x3c3c46,0x4c4c58]; // STORM FRAME PASS: a shade lighter than the old near-black palette, so the cloud reads against the dark tree line behind the boat as well as against the sky
     for(var i=0;i<9;i++){
       var r=1.15+rnd(i*7)*0.75;
       var s=new THREE.Mesh(new THREE.SphereGeometry(r,10,8), new THREE.MeshBasicMaterial({ color:cols[i%4], transparent:true, opacity:0.97, depthWrite:false }));
@@ -6877,13 +6917,23 @@ var SceneFX = (function(){
           // announced in the open, both players are told exactly which
           // card it is — hung high on a thick pale line from your hand,
           // swinging and slowly turning so the face reads.
-          // FIX ROUND (Jenna, real play: "could not confirm it dips or
-          // holds"): the dangle runs a full 6.4s — rise ~0.9s, then
-          // swinging holds broken by TWO deep slow DIPS (~1.4s each)
-          // that put the card's lower two-thirds under the surface
-          // (splash + ring going in and coming back out of each one)
-          // — before the red buoy marks the set trap until it springs.
-          // (The dip count/placement lives in the prop fn below.)
+          // DANGLE TIMING (Jenna, real play: "the card dangles but
+          // only briefly and intermittently — I never saw the two
+          // dips"): DIAGNOSIS — the old dangle ran 6.4 game-seconds
+          // with its dips at 1.9–3.3s and 4.0–5.4s, but the trap
+          // springs the moment the victim's turn starts, and the turn
+          // gates release on a ~2.5s WALL-clock cap while scene time
+          // advances 1/60 per RENDERED frame — on any display under
+          // 60fps the spring fired at ~1.25–2.5 game-seconds and
+          // clearBaitDangle() killed the card before the first dip.
+          // The show is now compressed into the window that always
+          // plays: a 3.0 game-second dangle — rise ~0.3s, DIP 1 at
+          // 0.54–1.26s, DIP 2 at 1.56–2.28s (each putting the card's
+          // lower two-thirds under, splash + ring in and out), buoy
+          // at ~2.7s — and the turn gates hold the spring until the
+          // dangle finishes (see baitDangling() in the UI gates), so
+          // the dips cannot be cut short. (The dip placement lives
+          // in the prop fn below.)
           /* SINGLE-INSTANCE + OPEN WATER (Jenna, real play: "two copies
              of the chosen card" + "it never dips"): any earlier dangle
              (card + line) is swept first, so this card is the ONLY one;
@@ -6894,6 +6944,8 @@ var SceneFX = (function(){
           var trapSpot=O.position.clone().add(new THREE.Vector3(0,0, O.position.z>0 ? -3.1 : 3.1));
           clearBaitDangle();
           clearTrapBuoy();
+          var baitChosenId = ev.mateId ? (ev.mateId.slice(0,-1) + mateSuitOf(ev.mateId.slice(-1))) : null; // the setter's chosen card itself (ev.mateId names its mate)
+          setBaitDangleCard(baitChosenId); // HAND SYNC: the chosen card leaves the setter's visible hand for the whole dangle — the dangling card is the only copy on screen
           var baitTex = ev.mateId ? frontTexFor(ev.mateId.slice(0,-1) + mateSuitOf(ev.mateId.slice(-1))) : backTex; // the dangling card is the setter's chosen card = the mate of the rigged ask target
           var baitCard=makeCardObj(baitTex); baitCard.userData.item4="baitCard";
           baitCard.userData.baitGen=baitDangleGen; // SINGLE-INSTANCE GEN GUARD: clearBaitDangle() above bumped the generation; if a LATER set/spring/new-game bumps it again before this (possibly backlog-deferred) prop first runs, the prop removes itself below instead of becoming a second copy
@@ -6901,38 +6953,33 @@ var SceneFX = (function(){
           baitLine.castShadow=false; scene.add(baitLine);
           baitCard.userData.line=baitLine; // so clearBaitDangle / clearOneShotFx can sweep the line with the card
           var hangPos=new THREE.Vector3(trapSpot.x, 2.75, trapSpot.z);
-          spawnProp(baitCard,6.4,function(k,m){
+          spawnProp(baitCard,3.0,function(k,m){
             if(m.userData.baitGen!==baitDangleGen){ // superseded before it ever showed — die silently, taking the line with it
               if(baitLine.parent) scene.remove(baitLine);
               m.visible=false; return;
             }
-            if(k<0.14){ var u0=easeOut(k/0.14); m.position.lerpVectors(aPos,hangPos,u0); }
+            if(k<0.10){ var u0=easeOut(k/0.10); m.position.lerpVectors(aPos,hangPos,u0); }
             else {
               m.position.copy(hangPos);
-              m.position.y += Math.sin((k-0.14)*Math.PI*2.6)*0.13;
-              /* TWO DIPS (Jenna, real play: "it never dips"): the old
-                 single dip sat at k .50–.72 — one ~1.4s window in the
-                 back half of a 6.4s dangle, easy to miss entirely on a
-                 real phone (a glance at the strip, a frame hitch, and
-                 it was gone). The dangle now dips TWICE — k .30–.52
-                 and k .62–.84, ~1.4s each, centre down to ~-0.75 so
-                 the card's lower two-thirds go under — with a splash
-                 + ring going in AND coming out of each dip. In any
-                 3-second stretch of the dangle, a dip is happening or
-                 just happened. */
-              if(k>0.30 && k<0.52){ var dk1=(k-0.30)/0.22; m.position.y -= Math.sin(dk1*Math.PI)*3.5; }
-              if(k>0.62 && k<0.84){ var dk2=(k-0.62)/0.22; m.position.y -= Math.sin(dk2*Math.PI)*3.5; }
+              m.position.y += Math.sin((k-0.10)*Math.PI*2.6)*0.13;
+              /* TWO DIPS, FRONT-LOADED (see DANGLE TIMING above):
+                 dip 1 at k .18–.42 (0.54–1.26 game-s), dip 2 at
+                 k .52–.76 (1.56–2.28 game-s), centre down 3.3 so the
+                 card's lower two-thirds go under the surface — with
+                 a splash + ring going in AND coming out of each. */
+              if(k>0.18 && k<0.42){ var dk1=(k-0.18)/0.24; m.position.y -= Math.sin(dk1*Math.PI)*3.3; }
+              if(k>0.52 && k<0.76){ var dk2=(k-0.52)/0.24; m.position.y -= Math.sin(dk2*Math.PI)*3.3; }
             }
             m.rotation.z=Math.sin(k*Math.PI*5)*0.3;
             m.rotation.y=(seat===0?0:Math.PI)+Math.sin(k*2.4)*0.6; // slow turn around the camera-facing yaw: the face catches the viewer, then the back, then the face again
             var cardTop=m.position.clone(); cardTop.y+=1.5;
             setLineSeg(baitLine, aPos, cardTop);
-            if(k>0.325 && !m.userData.dip1In){ m.userData.dip1In=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,4.4); }
-            if(k>0.50 && !m.userData.dip1Out){ m.userData.dip1Out=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.8); }
-            if(k>0.645 && !m.userData.dip2In){ m.userData.dip2In=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,4.4); }
-            if(k>0.82 && !m.userData.dip2Out){ m.userData.dip2Out=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.8); }
-            if(k>0.965 && !m.userData.buoyed){ m.userData.buoyed=true; makeTrapBuoy(trapSpot.x,trapSpot.z); }
-            if(k>=0.999 && baitLine.parent) scene.remove(baitLine);
+            if(k>0.205 && !m.userData.dip1In){ m.userData.dip1In=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,4.4); }
+            if(k>0.395 && !m.userData.dip1Out){ m.userData.dip1Out=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.8); }
+            if(k>0.545 && !m.userData.dip2In){ m.userData.dip2In=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,4.4); }
+            if(k>0.735 && !m.userData.dip2Out){ m.userData.dip2Out=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.8); }
+            if(k>0.90 && !m.userData.buoyed){ m.userData.buoyed=true; makeTrapBuoy(trapSpot.x,trapSpot.z); }
+            if(k>=0.999){ if(baitLine.parent) scene.remove(baitLine); setBaitDangleCard(null); /* the dangle is over — the card is back in the setter's hand (the buoy alone marks the set trap now) */ }
           });
           react(A,"happy",0.8); react(O,"wow",0.7);
         }
@@ -7014,18 +7061,30 @@ var SceneFX = (function(){
         break;
 
       case "storm":
-        /* STRIKE POINT (Jenna, real play: "no bolt ever appears" — see
-           makeBolt): the bolt used to strike at the target angler's
-           exact x,z — inside the boat (hull + canopy in front of its
-           whole lower span) or inside the cloud blob at the pier. The
-           strike now lands on OPEN WATER ~38% of the way from the
-           target toward the whirlpool: still unmistakably a strike ON
-           that player (it lands right at their bow / pier end, with
-           the impact splash + ring there), but the full cloud-to-water
-           bolt stands in clear air and reads from every camera. The
-           cloud and rain stay over the angler, unchanged. */
-        var strikePt=new THREE.Vector3(O.position.x,0,O.position.z).lerp(new THREE.Vector3(0,0,0),0.38);
-        stormT=STORM_DUR; boltT=0; boltAt={ x:strikePt.x, z:strikePt.z }; whirlBoost=3; doSplash(true);
+        /* STORM CENTRE (Jenna, real play: "no cloud, no rain, and no
+           full-height bolt over the opponent's boat — only a brief
+           small glow clipped at the top edge... the storm appears
+           anchored to the pier/pond centre"): the old group hung at
+           the angler's exact spot with the cloud centre at y=5.6 and
+           its top at y≈8 — in the default Angled framing that whole
+           band projects onto the top sliver of the canvas (the boat
+           canopy top measures ~4.5% below the canvas top), so the
+           cloud and the bolt's top were at / over the edge, dark grey
+           on the dark tree line, and all that stayed visible was the
+           centre-pond churn. The WHOLE storm group — cloud, rain and
+           bolt — is now centred on ONE point: over the target's bow,
+           ~22% of the way from the angler toward the whirlpool, with
+           the cloud hung LOWER (centre y=4.85). It still reads as a
+           storm parked over that player's boat (the bow is right
+           there, the scatter flies out of their hand, the splashes
+           land around them), but the group sits over bright open
+           water, down inside the frame, and the bolt runs the full
+           height from that cloud straight down to the water at the
+           same x,z — never clipped, never hidden behind the hull.
+           The Angled preset also pulled back a touch (CAM_PRESETS)
+           so the boat zone has real margin at the top. */
+        var stormC=O.position.clone().lerp(new THREE.Vector3(0,0,0),0.22);
+        stormT=STORM_DUR; boltT=0; boltAt={ x:stormC.x, z:stormC.z }; whirlBoost=3; doSplash(true);
         // FIX ROUND (Jenna, real play: "the cloud, rain and bolt do not
         // appear at all"): the whole storm now runs STORM_DUR (4.8s).
         // The cloud is BIG (9 fat spheres at 1.5x prop scale), hangs
@@ -7036,16 +7095,16 @@ var SceneFX = (function(){
         // whole time; the bolt strikes at 0.3s / 1.8s / 3.3s with
         // ~1.2s / ~1.2s / ~1.3s holds (see tick()).
         var cloudM=makeStormCloudProp();
-        cloudM.position.set(O.position.x,5.6,O.position.z);
+        cloudM.position.set(stormC.x,4.85,stormC.z);
         spawnProp(cloudM,STORM_DUR,function(k,m){
           var pop=easeOut(Math.min(k/0.08,1));
-          m.scale.setScalar(Math.max(pop*1.5,0.01));
-          m.position.y=5.6+Math.sin(k*Math.PI*2)*0.12;
+          m.scale.setScalar(Math.max(pop*1.35,0.01));
+          m.position.y=4.85+Math.sin(k*Math.PI*2)*0.12;
           if(k>0.86){ var f=1-(k-0.86)/0.14; m.traverse(function(ch){ if(ch.material) ch.material.opacity=0.97*f; }); }
         });
-        var rainM=makeRainProp(); rainM.position.set(O.position.x,0,O.position.z);
+        var rainM=makeRainProp(); rainM.position.set(stormC.x,0,stormC.z);
         spawnProp(rainM,STORM_DUR,function(k,m){
-          m.children.forEach(function(s){ s.position.y = 5.9 - ((k*9 + s.userData.off) % 1)*5.3; });
+          m.children.forEach(function(s){ s.position.y = 5.5 - ((k*9 + s.userData.off) % 1)*4.9; });
           if(k>0.9){ var rf=1-(k-0.9)/0.1; m.children.forEach(function(s){ s.material.opacity=0.88*rf; }); }
         });
         later(0.35,function(){ doSplash(true); });
@@ -7484,6 +7543,8 @@ var SceneFX = (function(){
     },
     setHold:function(b){ fxHold=!!b; }, // FIX ROUND 4 (1): UI-layer denial gate holds the animation gate while the draw waits
     animBusy:animBusy, // ANIM PASS (8): the UI layer's animation-completion gate
+    baitDangling:function(){ return !!baitDangleCard; }, // BAIT DANGLE: true while a Bait & Switch dangle is live — the turn gates hold the trap's spring until it finishes, so its two dips always play
+    baitDangleCardId:function(){ return baitDangleCard; }, // BAIT HAND SYNC: the card id hidden from the setter's DOM hand while it dangles (render() reads this)
     /* ANIM PASS (8) FIX: hidden diagnostic for the gate — reports every
        term animBusy() reads, so a stuck gate can be traced to the exact
        effect instead of guessed at. Test-mode-style affordance; the

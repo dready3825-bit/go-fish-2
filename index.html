@@ -639,7 +639,7 @@
       <button class="btn btn-primary btn-block" id="soloBtn">🎣 Play vs the Computer</button>
       <button class="btn btn-block" id="installBtn" style="display:none">📲 How to install</button>
       <div id="liveNotice" role="status"></div>
-      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v18</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v19</div>
       <div class="divider">Play a friend live</div>
       <p style="font-size:13.5px;color:var(--ink-soft);margin:4px 2px 10px;line-height:1.55;text-align:left">Send your friend this app's link — https://dready3825-bit.github.io/go-fish-2/ — they can install it too. One of you taps <b>Create a room</b> and gets a short 6-letter code — tell your friend the code, they type it in below and tap <b>Join room</b>. That's it — no long codes to copy and paste.</p>
 
@@ -2243,7 +2243,7 @@ function clearPairCelebration(){
      over the new game. They are celebration artifacts: they die with
      the celebration, here, on every sweep path. */
   var fly=document.querySelectorAll(".fly-card");
-  for(var fi=0;fi<fly.length;fi++){ if(fly[fi].parentNode) fly[fi].parentNode.removeChild(fly[fi]); }
+  for(var fi=0;fi<fly.length;fi++){ try{ fly[fi].getAnimations().forEach(function(a){ a.cancel(); }); }catch(e){} if(fly[fi].parentNode) fly[fi].parentNode.removeChild(fly[fi]); }
 }
 function celebratePair(v, ev){
   var pid = ev && ev.pairId ? ev.pairId : null;
@@ -2312,6 +2312,7 @@ function celebratePair(v, ev){
           var d=document.createElement("div");
           d.className="fly-card"+(col==="red"?" red":"");
           d.textContent=rank+glyphs[i];
+          d.dataset.born=String(Date.now()); /* REMATCH SWEEP 3: birth stamp for the render()-level stale-card sweep — a fly-card's whole flight is ~1.1s, so any card older than 2.5s is a leftover by definition, whichever removal path missed it */
           d.style.left=(from.left+from.width/2-22+i*16)+"px";
           d.style.top=(from.top+6)+"px";
           document.body.appendChild(d);
@@ -2375,6 +2376,18 @@ function renderEndBanner(v){
 }
 function render(){
   var v=view; if(!v) return;
+  /* REMATCH SWEEP 3 (Jenna, real play: "the display card from the
+     finished game is still floating over the pond in the new game"):
+     a pair-celebration fly-card lives ~1.1s by design and is removed
+     by its animation's finish, a 1.6s fallback timer, and every
+     celebration sweep — yet one still reached the new game, so the
+     removal now ALSO runs here, on every render: any fly-card older
+     than 2.5s is a leftover from a finished moment and dies on the
+     spot, animations cancelled first so a fill-forwards WAAPI
+     animation can never hold it on screen. No display card can
+     outlive its celebration by more than one render again. */
+  var staleFly=document.querySelectorAll(".fly-card");
+  for(var sfi=0;sfi<staleFly.length;sfi++){ var born=parseInt(staleFly[sfi].dataset.born||"0",10); if(!born || Date.now()-born>2500){ try{ staleFly[sfi].getAnimations().forEach(function(a){ a.cancel(); }); }catch(e){} if(staleFly[sfi].parentNode) staleFly[sfi].parentNode.removeChild(staleFly[sfi]); } }
   var opp=v.opponent;
   /* top bar */
   if(mode==="solo") els.modeChip.textContent="🎣 Solo";
@@ -3481,7 +3494,7 @@ var SceneFX = (function(){
   var flights=[], ringsFx=[], fogFx=[];
   var confetti=null, confettiData=[], confettiT=9;
   var stormT=0, endFired=false; // ITEM 4 (Shark Bite): the old fin cone's state is gone - the shark is a spawnProp now.
-  var STORM_DUR=4.8; // FIX ROUND (Jenna, real play): the storm runs 4.8s (was 2.3s) — cloud, rain and all three long-hold bolt strikes live inside this one window; tick(), animBusy() and clearExpiredFx() all read it.
+  var STORM_DUR=5.4; // the storm runs 5.4s (was 4.8s) — cloud, rain and all three long-hold bolt strikes live inside this one window; tick(), animBusy() and clearExpiredFx() all read it. With the real-time FX clock (see tick) these are true wall seconds on every display, so the storm cannot be missed in a glance.
   var fxProps=[], boltMesh=null, boltT=9, boltAt=null;
   var baitDangleGen=0; /* BAIT SINGLE-INSTANCE, generation guard: bumped by every clearBaitDangle()/clearOneShotFx(). A dangle prop whose spawn was DEFERRED by the spawnProp backlog is not in fxProps yet, so the sweep cannot see it — the generation is how a superseded dangle recognises itself the moment its fn first runs and removes itself instead of becoming the second copy Jenna saw. */
   var baitDangleCard=null; /* BAIT HAND SYNC (Jenna, real play: "the same card was still fully visible in my hand at the same time — TWO copies on screen at once"): the id of the setter's chosen card while its dangle is live. The game rules keep that card in the setter's hand (the trap references its mate), so the HAND copy is hidden for exactly the dangle's life — set when the dangle is created, cleared when it ends, is swept, or the trap springs — leaving the dangling card as the ONLY copy on screen. render() reads baitDangleCardId() so a mid-dangle re-render keeps it hidden; syncBaitHand() covers the gap between the trigger and the next render. */
@@ -6096,12 +6109,25 @@ var SceneFX = (function(){
     pts.geometry.attributes.position.needsUpdate=true;
     return tt+dt;
   }
-  var whirlAngle=0, goldieAngle=0, goldieR=6.4, stormSplashAt=0, goldieWakeAt=0;
+  var whirlAngle=0, goldieAngle=0, goldieR=6.4, stormSplashAt=0, goldieWakeAt=0, lastTickT=0;
   function tick(){
     requestAnimationFrame(tick);
     if(!renderer || failed) return;
-    var t=(Date.now()-clockStart)/1000, dt=1/60;
-    frameCount++; gameT+=dt; // FIX ROUND 2 (1a/1c): one rendered frame, one game-time step
+    var t=(Date.now()-clockStart)/1000;
+    /* REAL-TIME FX CLOCK (Jenna, real play on her 120Hz phone: "my
+       Storm Surge shows nothing at all", "I never see the two dips"):
+       scene time used to advance a fixed 1/60s per RENDERED frame, so
+       every authored duration was only true at exactly 60fps. At
+       120fps (her Pixel) the whole show ran at double speed — the
+       4.8s storm was over in 2.4 wall-seconds and the bait dangle's
+       two dips flashed past in ~1.1s total, both while the player was
+       still reading the strip text that appears 350ms before the FX —
+       and at 30fps everything ran at half speed instead. dt is now
+       the REAL elapsed time between frames, clamped to 50ms so a
+       stalled tab can't teleport an effect: a 4.8s storm lasts 4.8
+       seconds on every display, and each dip gets its full window. */
+    var dt=Math.min(0.05, Math.max(0.0005, t-lastTickT)); lastTickT=t;
+    frameCount++; gameT+=dt; // one rendered frame, one real-time step
     waterTime.value=t; // PHASE 3: the water shaders' one shared clock — uniform write only, no geometry work
     if(rippleTex) rippleTex.offset.set(t*0.006, t*0.0042); // fine ripples drift across the surface
     // timers (delayed reactions / splashes)
@@ -6383,14 +6409,14 @@ var SceneFX = (function(){
         // water strike point under the storm cloud over the target's
         // bow — see the storm case in trigger()). VISIBILITY (Jenna,
         // real play: "not a sub-second flash"): three strikes with
-        // LONG holds — ~1.05s, ~1.05s, then ~1.25s — inside the 4.8s
+        // LONG holds — ~1.25s, ~1.25s, then ~1.65s — inside the 5.4s
         // storm window. The bolt body runs the full height from the
         // cloud (its top sits at y≈5.9, inside the lowered cloud
         // cluster) down to the water at the strike point (tip glow
         // breaking the surface at y≈-0.6). Each fresh
         // strike re-aims with a small jitter and lands with a splash +
         // ring at the opponent so the eye is drawn to where it hit.
-        var strike=(boltT>0.30&&boltT<1.50)||(boltT>1.80&&boltT<3.00)||(boltT>3.30&&boltT<4.60); // HOLD PASS (Jenna, real play): each strike now holds ~1.2-1.3s — at phone frame rates a ~1s hold could land between two glance-aways; three long holds inside the 4.8s window cannot all be missed
+        var strike=(boltT>0.30&&boltT<1.55)||(boltT>1.85&&boltT<3.10)||(boltT>3.40&&boltT<5.05); // HOLD PASS (Jenna, real play): each strike holds ~1.25-1.65 real seconds inside the 5.4s window — with the real-time FX clock these holds are true wall time at any refresh rate, so three long holds cannot all be missed
         if(strike && !boltMesh.visible){
           boltMesh.position.set((boltAt?boltAt.x:0)+(rnd(Math.floor(boltT*997)+11)-0.5)*1.3, 5.9, (boltAt?boltAt.z:0)+(rnd(Math.floor(boltT*613)+29)-0.5)*1.3);
           if(boltAt){ doSplashAt(boltAt.x,boltAt.z,false); spawnRing(new THREE.Vector3(boltAt.x,0.06,boltAt.z),0xfff3a0,3.4); }
@@ -6495,6 +6521,7 @@ var SceneFX = (function(){
     var i;
     baitDangleGen++; // a queued bait dangle from the old game must not spawn into the new one (see clearBaitDangle)
     setBaitDangleCard(null); // a new game restores the hand copy too — no card stays hidden across games
+    timers.length=0; // REMATCH SWEEP 3: pending later() beats belong to the OLD game (a Goldie fetch flight at +2.35s, a storm redraw cast at +2.95s, end-theatre bursts) — left queued, they would fire INTO the new game and put the finished game's cards/splashes over the fresh pond. The start case schedules its own beats only after this sweep runs (see trigger), so clearing here costs the new game nothing.
     for(i=fxProps.length-1;i>=0;i--){ try{ scene.remove(fxProps[i].mesh); }catch(e){} if(fxProps[i].mesh && fxProps[i].mesh.userData && fxProps[i].mesh.userData.line){ try{ scene.remove(fxProps[i].mesh.userData.line); }catch(e){} } }
     fxProps.length=0;
     for(i=flights.length-1;i>=0;i--){ try{ scene.remove(flights[i].obj); }catch(e){} }
@@ -6664,13 +6691,23 @@ var SceneFX = (function(){
     // Storm Surge: a dark storm cloud - a cluster of dark-grey spheres,
     // same technique as the fog blobs, from the existing primitives.
     var g=new THREE.Group();
-    var cols=[0x474754,0x51515e,0x3c3c46,0x4c4c58]; // STORM FRAME PASS: a shade lighter than the old near-black palette, so the cloud reads against the dark tree line behind the boat as well as against the sky
+    var cols=[0x59616e,0x646c7c,0x4a5058,0x59616e]; // STORM FRAME PASS: lifted a step lighter again — the near-black palette vanished against the dark tree line behind the boat; this slate reads against trees AND sky, and the pale lit underside row in the builder finishes the read
     for(var i=0;i<9;i++){
       var r=1.15+rnd(i*7)*0.75;
       var s=new THREE.Mesh(new THREE.SphereGeometry(r,10,8), new THREE.MeshBasicMaterial({ color:cols[i%4], transparent:true, opacity:0.97, depthWrite:false }));
       s.position.set((rnd(i*13)-0.5)*5.8, (rnd(i*17)-0.5)*1.0, (rnd(i*19)-0.5)*2.4);
       s.scale.y=0.62;
       g.add(s);
+    }
+    /* LIT UNDERSIDE: three pale blue-grey puffs along the cloud's
+       belly — the bright edge the eye catches against the dark hull
+       and tree line, so the cloud reads as a storm cloud over the
+       boat even in the top band of a phone screen. */
+    for(var j=0;j<3;j++){
+      var u=new THREE.Mesh(new THREE.SphereGeometry(0.95,10,8), new THREE.MeshBasicMaterial({ color:0xaebfd8, transparent:true, opacity:0.95, depthWrite:false }));
+      u.position.set((j-1)*1.9, -0.62, 0.3);
+      u.scale.y=0.5;
+      g.add(u);
     }
     g.userData.item4="cloud"; // probe tag: which prop this is
     return g;
@@ -6756,9 +6793,9 @@ var SceneFX = (function(){
   function makeRainProp(){
     // Storm Surge: a sheet of rain streaks over one angler.
     var g=new THREE.Group();
-    var rm=new THREE.MeshBasicMaterial({ color:0xd9f3ff, transparent:true, opacity:0.88, depthWrite:false });
+    var rm=new THREE.MeshBasicMaterial({ color:0xeaf7ff, transparent:true, opacity:0.95, depthWrite:false });
     for(var i=0;i<34;i++){
-      var s=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,1.05,5), rm);
+      var s=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,1.3,5), rm);
       s.position.set((rnd(i*7)-0.5)*5.4, 4, (rnd(i*11)-0.5)*3.6);
       s.userData.off=rnd(i*13);
       g.add(s);
@@ -6918,22 +6955,21 @@ var SceneFX = (function(){
           // card it is — hung high on a thick pale line from your hand,
           // swinging and slowly turning so the face reads.
           // DANGLE TIMING (Jenna, real play: "the card dangles but
-          // only briefly and intermittently — I never saw the two
-          // dips"): DIAGNOSIS — the old dangle ran 6.4 game-seconds
-          // with its dips at 1.9–3.3s and 4.0–5.4s, but the trap
-          // springs the moment the victim's turn starts, and the turn
-          // gates release on a ~2.5s WALL-clock cap while scene time
-          // advances 1/60 per RENDERED frame — on any display under
-          // 60fps the spring fired at ~1.25–2.5 game-seconds and
-          // clearBaitDangle() killed the card before the first dip.
-          // The show is now compressed into the window that always
-          // plays: a 3.0 game-second dangle — rise ~0.3s, DIP 1 at
-          // 0.54–1.26s, DIP 2 at 1.56–2.28s (each putting the card's
-          // lower two-thirds under, splash + ring in and out), buoy
-          // at ~2.7s — and the turn gates hold the spring until the
-          // dangle finishes (see baitDangling() in the UI gates), so
-          // the dips cannot be cut short. (The dip placement lives
-          // in the prop fn below.)
+          // I never saw the two dips"): DIAGNOSIS — the dips were
+          // placed inside a 3.0 game-second dangle on the old
+          // frame-locked clock, which advanced 1/60s per RENDERED
+          // frame: on her 120Hz phone the whole dangle lasted ~1.5
+          // wall-seconds and both dips flashed past in ~1.1s while
+          // she was still reading the strip. The FX clock is now
+          // real time (see tick), and the show is lengthened into
+          // the window that always plays: a 3.6 real-second dangle —
+          // rise ~0.3s, DIP 1 at 0.58–1.44s, DIP 2 at 1.94–2.81s
+          // (each putting the card's lower two-thirds under, with a
+          // splash + ring going in, a second splash at the bottom,
+          // and another coming out), buoy at ~3.2s — and the turn
+          // gates hold the spring until the dangle finishes (see
+          // baitDangling() in the UI gates), so the dips cannot be
+          // cut short. (The dip placement lives in the prop fn below.)
           /* SINGLE-INSTANCE + OPEN WATER (Jenna, real play: "two copies
              of the chosen card" + "it never dips"): any earlier dangle
              (card + line) is swept first, so this card is the ONLY one;
@@ -6953,31 +6989,34 @@ var SceneFX = (function(){
           baitLine.castShadow=false; scene.add(baitLine);
           baitCard.userData.line=baitLine; // so clearBaitDangle / clearOneShotFx can sweep the line with the card
           var hangPos=new THREE.Vector3(trapSpot.x, 2.75, trapSpot.z);
-          spawnProp(baitCard,3.0,function(k,m){
+          spawnProp(baitCard,3.6,function(k,m){
             if(m.userData.baitGen!==baitDangleGen){ // superseded before it ever showed — die silently, taking the line with it
               if(baitLine.parent) scene.remove(baitLine);
               m.visible=false; return;
             }
-            if(k<0.10){ var u0=easeOut(k/0.10); m.position.lerpVectors(aPos,hangPos,u0); }
+            if(k<0.08){ var u0=easeOut(k/0.08); m.position.lerpVectors(aPos,hangPos,u0); }
             else {
               m.position.copy(hangPos);
-              m.position.y += Math.sin((k-0.10)*Math.PI*2.6)*0.13;
-              /* TWO DIPS, FRONT-LOADED (see DANGLE TIMING above):
-                 dip 1 at k .18–.42 (0.54–1.26 game-s), dip 2 at
-                 k .52–.76 (1.56–2.28 game-s), centre down 3.3 so the
-                 card's lower two-thirds go under the surface — with
-                 a splash + ring going in AND coming out of each. */
-              if(k>0.18 && k<0.42){ var dk1=(k-0.18)/0.24; m.position.y -= Math.sin(dk1*Math.PI)*3.3; }
-              if(k>0.52 && k<0.76){ var dk2=(k-0.52)/0.24; m.position.y -= Math.sin(dk2*Math.PI)*3.3; }
+              m.position.y += Math.sin((k-0.08)*Math.PI*2.6)*0.13;
+              /* TWO DIPS (see DANGLE TIMING above): dip 1 at
+                 k .16–.40 (0.58–1.44 real-s), dip 2 at k .54–.78
+                 (1.94–2.81 real-s), centre down 3.5 so the card's
+                 lower two-thirds go under the surface — with a
+                 splash + ring going in, a second splash at the
+                 bottom of the dip, and another coming out. */
+              if(k>0.16 && k<0.40){ var dk1=(k-0.16)/0.24; m.position.y -= Math.sin(dk1*Math.PI)*3.5; }
+              if(k>0.54 && k<0.78){ var dk2=(k-0.54)/0.24; m.position.y -= Math.sin(dk2*Math.PI)*3.5; }
             }
             m.rotation.z=Math.sin(k*Math.PI*5)*0.3;
             m.rotation.y=(seat===0?0:Math.PI)+Math.sin(k*2.4)*0.6; // slow turn around the camera-facing yaw: the face catches the viewer, then the back, then the face again
             var cardTop=m.position.clone(); cardTop.y+=1.5;
             setLineSeg(baitLine, aPos, cardTop);
-            if(k>0.205 && !m.userData.dip1In){ m.userData.dip1In=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,4.4); }
-            if(k>0.395 && !m.userData.dip1Out){ m.userData.dip1Out=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.8); }
-            if(k>0.545 && !m.userData.dip2In){ m.userData.dip2In=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,4.4); }
-            if(k>0.735 && !m.userData.dip2Out){ m.userData.dip2Out=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.8); }
+            if(k>0.185 && !m.userData.dip1In){ m.userData.dip1In=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,4.4); }
+            if(k>0.28 && !m.userData.dip1Bot){ m.userData.dip1Bot=true; doSplashAt(trapSpot.x,trapSpot.z,false); }
+            if(k>0.375 && !m.userData.dip1Out){ m.userData.dip1Out=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.8); }
+            if(k>0.565 && !m.userData.dip2In){ m.userData.dip2In=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,4.4); }
+            if(k>0.66 && !m.userData.dip2Bot){ m.userData.dip2Bot=true; doSplashAt(trapSpot.x,trapSpot.z,false); }
+            if(k>0.755 && !m.userData.dip2Out){ m.userData.dip2Out=true; doSplashAt(trapSpot.x,trapSpot.z,true); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.8); }
             if(k>0.90 && !m.userData.buoyed){ m.userData.buoyed=true; makeTrapBuoy(trapSpot.x,trapSpot.z); }
             if(k>=0.999){ if(baitLine.parent) scene.remove(baitLine); setBaitDangleCard(null); /* the dangle is over — the card is back in the setter's hand (the buoy alone marks the set trap now) */ }
           });
@@ -7086,7 +7125,8 @@ var SceneFX = (function(){
         var stormC=O.position.clone().lerp(new THREE.Vector3(0,0,0),0.22);
         stormT=STORM_DUR; boltT=0; boltAt={ x:stormC.x, z:stormC.z }; whirlBoost=3; doSplash(true);
         // FIX ROUND (Jenna, real play: "the cloud, rain and bolt do not
-        // appear at all"): the whole storm now runs STORM_DUR (4.8s).
+        // appear at all"): the whole storm now runs STORM_DUR (5.4s of
+        // real time — see the real-time FX clock in tick()).
         // The cloud is BIG (9 fat spheres at 1.5x prop scale), hangs
         // LOW over the foe (y≈5.6 — in frame in every camera preset,
         // where y≈7.0 rode at/above the top edge) and stays for the
@@ -7098,7 +7138,7 @@ var SceneFX = (function(){
         cloudM.position.set(stormC.x,4.85,stormC.z);
         spawnProp(cloudM,STORM_DUR,function(k,m){
           var pop=easeOut(Math.min(k/0.08,1));
-          m.scale.setScalar(Math.max(pop*1.35,0.01));
+          m.scale.setScalar(Math.max(pop*1.5,0.01));
           m.position.y=4.85+Math.sin(k*Math.PI*2)*0.12;
           if(k>0.86){ var f=1-(k-0.86)/0.14; m.traverse(function(ch){ if(ch.material) ch.material.opacity=0.97*f; }); }
         });

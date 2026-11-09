@@ -1438,7 +1438,7 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
       var mineT=me.hand.find(function(c){ return c.id===discardCardId; });
       st.baitTrap={ forPlayer:1-who, by:who, mateId:mateIdOf(mineT), label:askTargetLabel(mineT) };
       pushLog(st, name+" set Bait & Switch — "+oppName+" will be forced to ask for the "+askTargetLabel(mineT)+" first.","sys");
-      setEvent(st, evBase("bait",{ text:"Bait & Switch! "+name+" rigged the next ask: on their turn, "+oppName+" MUST ask "+name+" for the "+askTargetLabel(mineT)+" first — win or lose, that's their turn spent." })); break;
+      setEvent(st, evBase("bait",{ mateId:st.baitTrap.mateId, text:"Bait & Switch! "+name+" rigged the next ask: on their turn, "+oppName+" MUST ask "+name+" for the "+askTargetLabel(mineT)+" first — win or lose, that's their turn spent." })); break;
     }
     case "lucky": {
       /* DRAW 3, KEEP 1 YOU CHOOSE: the 3 hauled cards are held in
@@ -2225,27 +2225,30 @@ function celebratePair(v, ev){
   var whoName = yours ? v.you.name : (v.opponent?v.opponent.name:"Opponent");
   /* SCORE SYNC: every score display — the header (score line AND the
      meta pair count), BOTH pair piles, and the Pairs board (grid +
-     summary) — is rewritten from THIS view, the one in which the pair
-     was just banked, in this one synchronous block. The celebration
-     fires on its own deferred beat (words first, visuals 350ms
-     later), so patching only SOME of the displays here left the rest
-     showing the previous render's count for a beat — the header said
-     1 pair while the pile still read "0 pairs" and the board still
-     read 0, until the next full render caught them up. All of them
-     now move in the same update cycle, from the same view, so they
-     can never show different counts at the same moment. */
-  if(v.opponent){
+     summary) — is rewritten in this one synchronous block. The
+     celebration fires on its own deferred beat (words first, visuals
+     350ms later), so it must sync from the FRESHEST view (the global
+     current view), never the view captured when its event landed:
+     patching from the captured view dragged the header back to the
+     previous event's count while the piles — already re-rendered by
+     the newer event — showed the new one, leaving the header trailing
+     the piles by one event until something else re-rendered. Syncing
+     from the freshest view can only move every display forward
+     together, so they can never show different counts at the same
+     moment. */
+  var sv = (typeof view!=="undefined" && view && view.you) ? view : v;
+  if(sv.opponent){
     var scEl=els.oppChip ? els.oppChip.querySelector(".opp-score") : null;
-    if(scEl) scEl.textContent="You "+v.you.pairs.length+" — "+v.opponent.pairs.length;
+    if(scEl) scEl.textContent="You "+sv.you.pairs.length+" — "+sv.opponent.pairs.length;
     var mtEl=els.oppChip ? els.oppChip.querySelector(".opp-meta") : null;
     if(mtEl){
-      var sh=[v.opponent.shielded?"⚓ anchor down":"", v.opponent.ringShielded?"🛡️ ring up":"", v.opponent.fogged?"🌫️ fogged":""].filter(Boolean).join(" · ");
-      mtEl.innerHTML="<b>"+esc(v.opponent.name)+"</b> · "+v.opponent.cardCount+" cards · "+v.opponent.pairs.length+(v.opponent.pairs.length===1?" pair":" pairs")+" · ⭐ "+v.opponent.modifierCount+(sh?" · "+sh:"");
+      var sh=[sv.opponent.shielded?"⚓ anchor down":"", sv.opponent.ringShielded?"🛡️ ring up":"", sv.opponent.fogged?"🌫️ fogged":""].filter(Boolean).join(" · ");
+      mtEl.innerHTML="<b>"+esc(sv.opponent.name)+"</b> · "+sv.opponent.cardCount+" cards · "+sv.opponent.pairs.length+(sv.opponent.pairs.length===1?" pair":" pairs")+" · ⭐ "+sv.opponent.modifierCount+(sh?" · "+sh:"");
     }
   }
-  renderPile(els.oppPile, v.opponent?v.opponent.name:"Opponent", v.opponent?v.opponent.pairs:[], false);
-  renderPile(els.youPile, v.you.name, v.you.pairs, true);
-  renderExtras(v);
+  renderPile(els.oppPile, sv.opponent?sv.opponent.name:"Opponent", sv.opponent?sv.opponent.pairs:[], false);
+  renderPile(els.youPile, sv.you.name, sv.you.pairs, true);
+  renderExtras(sv);
   /* Big overlay over the pond */
   if(els.pairOverlay){
     els.pairOverlaySub.textContent = label;
@@ -2474,6 +2477,23 @@ function render(){
   /* scene + sounds on new events */
   var ev=v.lastEvent;
   if(ev && ev.seq!==lastSeqSeen){
+    /* NEW GAME WITH A RESTARTED SEQ (live rematch): dealGame resets
+       eventSeq, so a fresh game's start event arrives with a SMALLER
+       seq than the finished game's last event. Solo rematches reset
+       lastSeqSeen up front, but live clients never do — without this
+       check the start event fell into the "next event" path below,
+       which FIRED the finished game's still-pending deferred
+       celebration (its PAIR! banner plus a final-score header/pile
+       sync from the old view) into the new game, where it lingered.
+       A restarted seq IS a new game: drop the pending presentations
+       silently (never fire them) and take the first-game path, whose
+       start handling sweeps the strip and any stale celebration. */
+    if(ev.kind==="start" && lastSeqSeen>0 && ev.seq<=lastSeqSeen){
+      if(deferredFx){ var ndFx=deferredFx; deferredFx=null; if(ndFx.timer) clearTimeout(ndFx.timer); }
+      if(deferredShownFx){ var ndSx=deferredShownFx; deferredShownFx=null; if(ndSx.timer) clearTimeout(ndSx.timer); }
+      if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false);
+      celebratedSeq=0; prevPairCounts=null; lastSeqSeen=0;
+    }
     var first = lastSeqSeen===0;
     lastSeqSeen=ev.seq;
     if(!first){
@@ -2871,10 +2891,10 @@ els.layBtn.addEventListener("click", function(){
   releaseBusyWhenFxDone();
 });
 function requestRematch(){
-  if(mode==="solo"){ dealGame(S,names); lastSeqSeen=0; selectedMod=null; armed=null; cpuChain=0; afterChange(); return; }
+  if(mode==="solo"){ clearPairCelebration(); celebratedSeq=0; prevPairCounts=null; dealGame(S,names); lastSeqSeen=0; selectedMod=null; armed=null; cpuChain=0; afterChange(); return; }
   if(mode==="guest"||mode==="host"){ sendToHost({ t:"rematch" }); if(view){ view.rematch.you=true; render(); } return; }
   S.rematch[0]=true;
-  if(S.rematch[0] && S.rematch[1]){ dealGame(S,names); lastSeqSeen=0; }
+  if(S.rematch[0] && S.rematch[1]){ clearPairCelebration(); celebratedSeq=0; prevPairCounts=null; dealGame(S,names); lastSeqSeen=0; }
   afterChange();
 }
 if(els.endBannerRematch) els.endBannerRematch.addEventListener("click", requestRematch);
@@ -4442,24 +4462,28 @@ var SceneFX = (function(){
     return g;
   }
   function makeBolt(){
-    /* VISIBILITY (test games: no lightning was ever seen): the bolt is
-       now thick, near-white at the core with a pale halo segment behind
-       each core segment, and the tick() strike windows are long enough
-       to actually catch (see the bolt timing there). */
+    /* VISIBILITY (Jenna: "the lightning bolt must be clearly visible,
+       not just a brief flash"): the bolt now runs the FULL height from
+       the storm cloud (y≈6.9) down to the water at the opponent
+       (y≈0.4) — the old bolt was only ~3.3 long and stopped mid-air
+       well above its target. Thick near-white core, pale halo, two
+       branch forks, and a glowing impact ball at the tip where it
+       lands. tick() holds each strike ~0.6-0.75s (see there). */
     var g=new THREE.Group(); var bm=new THREE.MeshBasicMaterial({ color:0xfffbe8, transparent:true, opacity:0.98 });
     var halo=new THREE.MeshBasicMaterial({ color:0xffe98a, transparent:true, opacity:0.38, depthWrite:false });
-    var pts=[[0,0],[0.38,-1.15],[-0.14,-2.1],[0.3,-3.3]];
-    for(var i=0;i<3;i++){
-      var dx=pts[i+1][0]-pts[i][0], dy=pts[i+1][1]-pts[i][1], len=Math.sqrt(dx*dx+dy*dy);
-      var hseg=new THREE.Mesh(new THREE.BoxGeometry(1.0,len+0.3,1.0), halo);
-      hseg.position.set((pts[i][0]+pts[i+1][0])/2,(pts[i][1]+pts[i+1][1])/2,0);
-      hseg.rotation.z=Math.atan2(dx,-dy);
-      g.add(hseg);
-      var seg=new THREE.Mesh(new THREE.BoxGeometry(0.52,len+0.2,0.52), bm);
-      seg.position.set((pts[i][0]+pts[i+1][0])/2,(pts[i][1]+pts[i+1][1])/2,0);
-      seg.rotation.z=Math.atan2(dx,-dy);
-      g.add(seg);
+    function boltSeg(x1,y1,x2,y2,coreW,haloW){
+      var dx=x2-x1, dy=y2-y1, len=Math.sqrt(dx*dx+dy*dy);
+      var hseg=new THREE.Mesh(new THREE.BoxGeometry(haloW,len+0.3,haloW), halo);
+      hseg.position.set((x1+x2)/2,(y1+y2)/2,0); hseg.rotation.z=Math.atan2(dx,-dy); g.add(hseg);
+      var seg=new THREE.Mesh(new THREE.BoxGeometry(coreW,len+0.2,coreW), bm);
+      seg.position.set((x1+x2)/2,(y1+y2)/2,0); seg.rotation.z=Math.atan2(dx,-dy); g.add(seg);
     }
+    var pts=[[0,0],[0.55,-1.7],[-0.3,-3.2],[0.45,-4.8],[-0.05,-6.5]];
+    for(var i=0;i<pts.length-1;i++) boltSeg(pts[i][0],pts[i][1],pts[i+1][0],pts[i+1][1],0.52,1.05);
+    boltSeg(0.55,-1.7, 1.6,-3.0, 0.3,0.62);   // fork 1
+    boltSeg(-0.3,-3.2, -1.45,-4.5, 0.3,0.62); // fork 2
+    var tipGlow=new THREE.Mesh(new THREE.SphereGeometry(0.62,10,8), halo); tipGlow.position.set(-0.05,-6.5,0); g.add(tipGlow);
+    var tipCore=new THREE.Mesh(new THREE.SphereGeometry(0.3,10,8), bm); tipCore.position.set(-0.05,-6.5,0); g.add(tipCore);
     g.visible=false; return g;
   }
   function iceSpread(targetPos){
@@ -6184,16 +6208,21 @@ var SceneFX = (function(){
     }
     // lightning for Storm Surge:
     if(boltMesh){
-      if(boltT<1.8){
+      if(boltT<2.3){
         boltT+=dt;
         // Storm Surge: the bolt strikes DOWN OUT OF the storm cloud
-        // (hung over the pond centre) and stays near the cloud, never
-        // re-randomised across the pond. VISIBILITY: the strikes used
-        // to be 0.2s flashes — easy to blink past and miss entirely in
-        // the test games. They now hold ~0.5s and ~0.4s: a strike you
-        // can see land, then a second flicker.
-        var strike=(boltT>0.22&&boltT<0.72)||(boltT>0.92&&boltT<1.32);
-        if(boltT<0.02) boltMesh.position.set((boltAt?boltAt.x:0)+(rnd(71)-0.5)*1.6, 6.6, (boltAt?boltAt.z:0)+(rnd(83)-0.5)*1.6);
+        // straight onto the opponent (boltAt = the opponent's spot,
+        // where the cloud and rain already hang). VISIBILITY (Jenna:
+        // "clearly visible, not just a brief flash"): three strikes
+        // that HOLD — ~0.75s, ~0.6s, then a ~0.25s final flicker —
+        // and each fresh strike re-aims with a small jitter and lands
+        // with a splash + ring at the opponent so the eye is drawn to
+        // exactly where it hit.
+        var strike=(boltT>0.25&&boltT<1.0)||(boltT>1.2&&boltT<1.8)||(boltT>2.02&&boltT<2.27);
+        if(strike && !boltMesh.visible){
+          boltMesh.position.set((boltAt?boltAt.x:0)+(rnd(Math.floor(boltT*997)+11)-0.5)*1.3, 6.9, (boltAt?boltAt.z:0)+(rnd(Math.floor(boltT*613)+29)-0.5)*1.3);
+          if(boltAt){ doSplashAt(boltAt.x,boltAt.z,false); spawnRing(new THREE.Vector3(boltAt.x,0.06,boltAt.z),0xfff3a0,3.4); }
+        }
         boltMesh.visible=strike;
       } else boltMesh.visible=false;
     }
@@ -6326,7 +6355,7 @@ var SceneFX = (function(){
     for(i=ringsFx.length-1;i>=0;i--){ if(ringsFx[i].t>=ringsFx[i].dur){ try{ scene.remove(ringsFx[i].mesh); }catch(e){} ringsFx.splice(i,1); } }
     for(i=fogFx.length-1;i>=0;i--){ if(fogFx[i].t>=fogFx[i].dur){ try{ scene.remove(fogFx[i].mesh); }catch(e){} fogFx.splice(i,1); } }
     if(monsterAnim && monsterAnim.t>=monsterAnim.dur){ monsterAnim=null; if(monster) monster.visible=false; }
-    if(boltT>=1.8){ boltT=9; if(boltMesh) boltMesh.visible=false; }
+    if(boltT>=2.3){ boltT=9; if(boltMesh) boltMesh.visible=false; }
     if(confettiT>=4.6){ confettiT=9; if(confetti) confetti.visible=false; }
     if(anglers.pier && anglers.pier.userData.domeT>=anglers.pier.userData.domeDur){ anglers.pier.userData.domeT=9; if(anglers.pier.userData.dome) anglers.pier.userData.dome.material.opacity=0; }
     if(anglers.boat && anglers.boat.userData.domeT>=anglers.boat.userData.domeDur){ anglers.boat.userData.domeT=9; if(anglers.boat.userData.dome) anglers.boat.userData.dome.material.opacity=0; }
@@ -6359,7 +6388,7 @@ var SceneFX = (function(){
        live FX. */
     if(flights.length || fxProps.length || fogFx.length) return true;
     if(timers.length) return true; // FIX ROUND 2 (1): a scheduled FX beat (goldie flyCard at 0.75s, pair flights, castLater) keeps the gate busy until it has fired
-    if(monsterAnim || stormT>0 || boltT<1.8 || confettiT<4.6) return true; // ITEM 4: the fin timer is gone (the shark is an fxProp now); luckyHover is a waiting state, deliberately NOT gated
+    if(monsterAnim || stormT>0 || boltT<2.3 || confettiT<4.6) return true; // ITEM 4: the fin timer is gone (the shark is an fxProp now); luckyHover is a waiting state, deliberately NOT gated
     if(goldieDash>0) return true; // FIX ROUND 2c: Goldie's dash (2.6s) had no term covering its tail
     if(anglers.pier && anglers.pier.userData.cast) return true;
     if(anglers.boat && anglers.boat.userData.cast) return true;
@@ -6490,6 +6519,24 @@ var SceneFX = (function(){
     var m=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,1,5), new THREE.MeshBasicMaterial({ color:0xf8fbff }));
     m.castShadow=false;
     return m;
+  }
+  function makeWormProp(){
+    // Swap Bait (Jenna: "the worms must be clearly visible"): a real
+    // worm — five plump segments strung along a gentle curve, ~1.2
+    // units long and ~0.34 thick (the old single squashed 0.12 sphere
+    // read as a pink dot). Unlit bright pink so pond lighting can
+    // never dim it, with darker pink bands between the segments.
+    var g=new THREE.Group();
+    var pink=new THREE.MeshBasicMaterial({ color:0xff7d9c });
+    var pinkDark=new THREE.MeshBasicMaterial({ color:0xd64f74 });
+    for(var i=0;i<5;i++){
+      var s=new THREE.Mesh(new THREE.SphereGeometry(0.17,9,7), i%2 ? pinkDark : pink);
+      s.position.set((i-2)*0.23, Math.sin(i*1.1)*0.05, 0);
+      s.scale.set(1.15,0.92,0.92);
+      g.add(s);
+    }
+    g.userData.item4="worm"; // probe tag
+    return g;
   }
   function makeDartProp(){
     // Mate Sense: a dart - slim shaft, steel point, bright red flights.
@@ -6680,7 +6727,7 @@ var SceneFX = (function(){
           var trapBase=A.position.clone().add(new THREE.Vector3(0,0.1, A.position.z>0 ? -2.2 : 2.2));
           doSplashAt(trapBase.x,trapBase.z,true);
           spawnRing(new THREE.Vector3(trapBase.x,0.06,trapBase.z),0xffcf4d,4.2);
-          var snapCard=makeCardObj(backTex); snapCard.scale.setScalar(1.9);
+          var snapCard=makeCardObj(backTex);
           spawnProp(snapCard,1.1,function(k,m){ m.position.copy(trapBase); m.position.y=trapBase.y+Math.sin(Math.min(k*1.4,1)*Math.PI)*1.6; m.rotation.y=k*4.2; });
           later(0.6,function(){
             if(ev.drew || ev.drawnCard) startCast(A,{ tex:drawnTex });
@@ -6688,20 +6735,34 @@ var SceneFX = (function(){
           });
           react(O,"wow",0.8);
         } else {
-          // REWORK: setting the trap - NO bait box in the water. Your
-          // chosen card itself dangles face-down on a line over the
-          // water in front of the foe, swinging and dipping like bait;
-          // the red buoy then marks the set trap until it springs.
+          // REWORK (Jenna): setting the trap - NO bait box. Your chosen
+          // card itself dangles on the line over the water in front of
+          // the foe, and it must be CLEARLY visible: full flight size
+          // (the old 1.9 shrink is gone), FACE showing — the trap is
+          // announced in the open, both players are told exactly which
+          // card it is — hung high on a thick pale line from your hand,
+          // swinging and slowly turning so the face reads, for a full
+          // ~4s with one clear dip to the water before the red buoy
+          // marks the set trap until it springs.
           var trapSpot=O.position.clone().add(new THREE.Vector3(0,0, O.position.z>0 ? -2.4 : 2.4));
           clearTrapBuoy();
-          var baitCard=makeCardObj(backTex); baitCard.scale.setScalar(1.9);
-          var baitLine=makeLineProp(); scene.add(baitLine);
-          spawnProp(baitCard,3.0,function(k,m){
-            m.position.set(trapSpot.x, 1.6+Math.sin(k*Math.PI*2)*0.2-(k>0.82?(k-0.82)*4.4:0), trapSpot.z);
-            m.rotation.z=Math.sin(k*Math.PI*4)*0.16;
-            m.rotation.y=Math.sin(k*3)*0.3;
-            setLineSeg(baitLine, aPos, m.position);
-            if(k>0.5 && !m.userData.dipped){ m.userData.dipped=true; doSplashAt(trapSpot.x,trapSpot.z,false); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.6); }
+          var baitTex = ev.mateId ? frontTexFor(ev.mateId.slice(0,-1) + mateSuitOf(ev.mateId.slice(-1))) : backTex; // the dangling card is the setter's chosen card = the mate of the rigged ask target
+          var baitCard=makeCardObj(baitTex); baitCard.userData.item4="baitCard";
+          var baitLine=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,1,6), new THREE.MeshBasicMaterial({ color:0xfff0b3 }));
+          baitLine.castShadow=false; scene.add(baitLine);
+          var hangPos=new THREE.Vector3(trapSpot.x, 2.45, trapSpot.z);
+          spawnProp(baitCard,4.2,function(k,m){
+            if(k<0.22){ var u0=easeOut(k/0.22); m.position.lerpVectors(aPos,hangPos,u0); }
+            else {
+              m.position.copy(hangPos);
+              m.position.y += Math.sin((k-0.22)*Math.PI*3.2)*0.16;
+              if(k>0.78 && k<0.92){ var dk=(k-0.78)/0.14; m.position.y -= Math.sin(dk*Math.PI)*2.0; } // one clear dip to the water
+            }
+            m.rotation.z=Math.sin(k*Math.PI*5)*0.3;
+            m.rotation.y=(seat===0?0:Math.PI)+Math.sin(k*2.4)*0.6; // slow turn around the camera-facing yaw: the face catches the viewer, then the back, then the face again
+            var cardTop=m.position.clone(); cardTop.y+=1.5;
+            setLineSeg(baitLine, aPos, cardTop);
+            if(k>0.82 && !m.userData.dipped){ m.userData.dipped=true; doSplashAt(trapSpot.x,trapSpot.z,false); spawnRing(new THREE.Vector3(trapSpot.x,0.06,trapSpot.z),0xffcf4d,3.6); }
             if(k>0.97 && !m.userData.buoyed){ m.userData.buoyed=true; makeTrapBuoy(trapSpot.x,trapSpot.z); }
             if(k>=0.999 && baitLine.parent) scene.remove(baitLine);
           });
@@ -6785,7 +6846,7 @@ var SceneFX = (function(){
         break;
 
       case "storm":
-        stormT=2.3; boltT=0; boltAt={ x:O.position.x*0.8, z:O.position.z*0.8 }; whirlBoost=3; doSplash(true);
+        stormT=2.3; boltT=0; boltAt={ x:O.position.x, z:O.position.z }; whirlBoost=3; doSplash(true);
         // ITEM 4: the storm cloud pops up above the pond FIRST and hangs
         // ~2.3s; the bolt strikes DOWN OUT OF the cloud at ~0.3s (see the
         // bolt timing in tick()). Bolts + churn + scattering are unchanged.
@@ -6938,22 +6999,23 @@ var SceneFX = (function(){
         }
         break;
       case "swap":
-        // REWORK (Jenna 00:49): you TOSS your chosen card into the
-        // water - it arcs in face-down with a splash - and a handful
-        // of worms goes in with it, three staggered wriggling arcs,
-        // each with its own little splash. Then the pole hauls the
+        // REWORK (Jenna): you TOSS your chosen card into the water -
+        // it arcs in face-down with a splash - and the worms go in
+        // WITH it: four fat segmented worms (makeWormProp) on their
+        // own staggered arcs, wriggling as they fly, each splashing
+        // down around the card's entry point. Then the pole hauls the
         // fresh card back out of the water like normal.
         flyCard({ from:aPos, to:center, tex:backTex, dur:0.75, arc:1.5, fade:true, onArrive:function(){ doSplash(false); } });
-        [0,1,2].forEach(function(wi){
-          later(wi*0.15,function(){
-            var worm=new THREE.Mesh(new THREE.SphereGeometry(0.12,7,6), mat(0xe88aa0,{roughness:0.6}));
-            worm.scale.set(1.8,0.7,0.7);
-            var wp=center.clone(); wp.x+=(wi-1)*0.55; wp.z+=(wi%2?0.45:-0.35); wp.y=0.3;
-            spawnProp(worm,0.7,function(k,m){
+        [0,1,2,3].forEach(function(wi){
+          later(wi*0.13,function(){
+            var worm=makeWormProp();
+            var wp=center.clone(); wp.x+=(wi-1.5)*0.55; wp.z+=(wi%2?0.5:-0.42); wp.y=0.25;
+            spawnProp(worm,0.85,function(k,m){
               m.position.lerpVectors(aPos,wp,k);
-              m.position.y+=Math.sin(k*Math.PI)*1.45;
-              m.rotation.y=k*6;
-              if(k>0.92 && !m.userData.splashed){ m.userData.splashed=true; doSplashAt(wp.x,wp.z,false); }
+              m.position.y+=Math.sin(k*Math.PI)*1.7;
+              m.rotation.y=k*5+wi*1.7;
+              m.rotation.z=Math.sin(k*22+wi*2.1)*0.45; // the wriggle
+              if(k>0.9 && !m.userData.splashed){ m.userData.splashed=true; doSplashAt(wp.x,wp.z,false); }
             });
           });
         });

@@ -639,7 +639,7 @@
       <button class="btn btn-primary btn-block" id="soloBtn">🎣 Play vs the Computer</button>
       <button class="btn btn-block" id="installBtn" style="display:none">📲 How to install</button>
       <div id="liveNotice" role="status"></div>
-      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v24</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v25</div>
       <div class="divider">Play a friend live</div>
       <p style="font-size:13.5px;color:var(--ink-soft);margin:4px 2px 10px;line-height:1.55;text-align:left">Send your friend this app's link — https://dready3825-bit.github.io/go-fish-2/ — they can install it too. One of you taps <b>Create a room</b> and gets a short 6-letter code — tell your friend the code, they type it in below and tap <b>Join room</b>. That's it — no long codes to copy and paste.</p>
 
@@ -1370,8 +1370,9 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
     }
     case "double": {
       var haul3=drawCards(st,who,2); var pr3=extractPairs(st,who); sortHand(me);
+      var dc3=pr3.length?haul3.cards.find(function(c){ return pairIdFor(c)===pr3[0]; }):null;
       pushLog(st, name+" double-cast and drew "+drawTotal(haul3)+".","sys");
-      var e3=evBase("double",{ drawnCardId:haul3.cards[0]?haul3.cards[0].id:undefined, drewMod:haul3.mods[0], count:drawTotal(haul3), text:"Double Cast! "+name+" hauled in "+drawTotal(haul3)+" cards." });
+      var e3=evBase("double",{ drawnCardId:dc3?dc3.id:(haul3.cards[0]?haul3.cards[0].id:undefined), drewMod:haul3.mods[0], count:drawTotal(haul3), text:"Double Cast! "+name+" hauled in "+drawTotal(haul3)+" cards." });
       Object.assign(e3,pairFields(pr3)); setEvent(st,e3); break;
     }
     case "magnet": {
@@ -1415,8 +1416,9 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
       var i9=Math.floor(Math.random()*me.hand.length); var eaten=me.hand.splice(i9,1)[0];
       st.deck=shuffle(st.deck.concat([eaten]));
       var haul9=drawCards(st,who,2); var pr9=extractPairs(st,who); sortHand(me);
+      var dc9=pr9.length?haul9.cards.find(function(c){ return pairIdFor(c)===pr9[0]; }):null;
       pushLog(st, "The Pond Monster leapt out and ate a card from "+possLow(name)+" hand! "+name+" fished "+drawTotal(haul9)+" back.","sys");
-      var e9=evBase("monster",{ drawnCardId:haul9.cards[0]?haul9.cards[0].id:undefined, drewMod:haul9.mods[0], count:drawTotal(haul9), text:"Pond Monster! It leapt out and ate one of "+possLow(name)+" cards — and "+name+" fished "+drawTotal(haul9)+" back"+(pr9.length?" — paired the "+pairLabel(pr9[0])+"!":".") });
+      var e9=evBase("monster",{ drawnCardId:dc9?dc9.id:(haul9.cards[0]?haul9.cards[0].id:undefined), drewMod:haul9.mods[0], count:drawTotal(haul9), text:"Pond Monster! It leapt out and ate one of "+possLow(name)+" cards — and "+name+" fished "+drawTotal(haul9)+" back"+(pr9.length?" — paired the "+pairLabel(pr9[0])+"!":".") });
       Object.assign(e9,pairFields(pr9)); setEvent(st,e9); break;
     }
     case "anchor": {

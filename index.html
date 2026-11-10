@@ -639,7 +639,7 @@
       <button class="btn btn-primary btn-block" id="soloBtn">🎣 Play vs the Computer</button>
       <button class="btn btn-block" id="installBtn" style="display:none">📲 How to install</button>
       <div id="liveNotice" role="status"></div>
-      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v21</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v22</div>
       <div class="divider">Play a friend live</div>
       <p style="font-size:13.5px;color:var(--ink-soft);margin:4px 2px 10px;line-height:1.55;text-align:left">Send your friend this app's link — https://dready3825-bit.github.io/go-fish-2/ — they can install it too. One of you taps <b>Create a room</b> and gets a short 6-letter code — tell your friend the code, they type it in below and tap <b>Join room</b>. That's it — no long codes to copy and paste.</p>
 
@@ -1756,6 +1756,11 @@ var celebratedSeq=0;
 var prevPairCounts=null;
 var suppressDealCeleb=false; /* REMATCH SWEEP: set the moment a rematch is tapped (dropPendingPresentations) — the pair-count watcher in render() must not fire a deal-pair PAIR! celebration for the new game, whatever the stale counts say. Consumed (cleared) by that watcher on the start event it guards. */
 var pairOverlayTimer=null;
+var lastPillPid=null; /* FIX v22 (Bug 2): the pairId whose PAIR! pill is
+  currently up. celebratePair skips re-showing the pill for the same
+  pair while it is already showing, so a repeated celebration of one
+  pair cannot restart the animation + hide timer and keep the pill
+  on screen. Cleared whenever the pill hides (timer / sweep). */
 var pc=null, dc=null, roomCode="", hostStatus="waiting", disconnected=false;
 
 var KIND_TO_MOD = { snatch:"snatch", swap:"swap", peek:"peek", double:"double", magnet:"magnet", monster:"monster", anchor:"anchor", sense:"sense", shield:"shield", storm:"storm", reel:"reel", fog:"fog", bait:"bait", lucky:"lucky", mirror:"mirror", whirl:"whirl", goldie:"goldie" };
@@ -2223,6 +2228,9 @@ function privateIntelLine(v){
    found them doing. */
 function clearPairCelebration(){
   if(els.pairOverlay) els.pairOverlay.classList.remove("show");
+  lastPillPid=null; /* FIX v22 (Bug 2): the guard tracks the pill that is
+    up — once the pill is swept, the next celebration of any pair may
+    show it again. */
   /* ERASE THE WORDS, not just the visibility (Jenna, real play: the
      new game still READ "PAIR! / 3s (black) / You banked a pair!" from
      the finished game): every sweep before this only removed the
@@ -2275,21 +2283,33 @@ function celebratePair(v, ev){
     var mtEl=els.oppChip ? els.oppChip.querySelector(".opp-meta") : null;
     if(mtEl){
       var sh=[sv.opponent.shielded?"⚓ anchor down":"", sv.opponent.ringShielded?"🛡️ ring up":"", sv.opponent.fogged?"🌫️ fogged":""].filter(Boolean).join(" · ");
-      mtEl.innerHTML="<b>"+esc(sv.opponent.name)+"</b> · "+sv.opponent.cardCount+" cards · "+sv.opponent.pairs.length+(sv.opponent.pairs.length===1?" pair":" pairs")+" · ⭐ "+sv.opponent.modifierCount+(sh?" · "+sh:"");
+      /* FIX v22 (Bug 4): the opponent's card count is ALL cards held
+         (fish + modifiers), matching the hand header's "4 fish · 3
+         mods" total. cardCount from the server is fish only; the
+         modifier count is already shown as ⭐, so add it in here. */
+      mtEl.innerHTML="<b>"+esc(sv.opponent.name)+"</b> · "+(sv.opponent.cardCount+(sv.opponent.modifierCount||0))+" cards · "+sv.opponent.pairs.length+(sv.opponent.pairs.length===1?" pair":" pairs")+" · ⭐ "+sv.opponent.modifierCount+(sh?" · "+sh:"");
     }
   }
   renderPile(els.oppPile, sv.opponent?sv.opponent.name:"Opponent", sv.opponent?sv.opponent.pairs:[], false);
   renderPile(els.youPile, sv.you.name, sv.you.pairs, true);
   renderExtras(sv);
   /* Big overlay over the pond */
-  if(els.pairOverlay){
+  /* FIX v22 (Bug 2): a pair shows the pill at most once while it is
+     up. If this exact pair already put the pill up and it is still
+     showing, a second celebratePair call for it must not restart the
+     animation and its 2.4s hide timer — repeated re-fires are what
+     could keep the pill on screen past its moment. The score sync
+     above still runs every time; only the pill re-show is guarded.
+     A different pair (new pid) always shows. */
+  if(els.pairOverlay && !(els.pairOverlay.classList.contains("show") && lastPillPid===pid)){
+    lastPillPid=pid;
     els.pairOverlaySub.textContent = label;
     els.pairOverlayWho.textContent = (yours ? "You banked a pair!" : whoName+" banked a pair");
     els.pairOverlay.classList.remove("show");
     void els.pairOverlay.offsetWidth;
     els.pairOverlay.classList.add("show");
     clearTimeout(pairOverlayTimer);
-    pairOverlayTimer=setTimeout(function(){ els.pairOverlay.classList.remove("show"); }, 2400);
+    pairOverlayTimer=setTimeout(function(){ els.pairOverlay.classList.remove("show"); lastPillPid=null; }, 2400);
   }
   /* Pile pop + badge jump + score pulse */
   var pileEl = yours ? els.youPile : els.oppPile;
@@ -2405,8 +2425,10 @@ function render(){
     var initial=(opp.name||"?").trim().charAt(0).toUpperCase()||"?";
     var onlineDot = mode==="solo" ? "" : '<span class="dot'+(opp.online?"":" off")+'"></span>';
     /* NEW ITEM 3: the matchup is ONE slim line — opponent info on the
-       left, the pair score on the right. The separate score chip is gone. */
-    els.oppChip.innerHTML = '<span class="opp-avatar">'+esc(initial)+onlineDot+'</span><span class="opp-meta"><b>'+esc(opp.name)+"</b> · "+opp.cardCount+" cards · "+opp.pairs.length+(opp.pairs.length===1?" pair":" pairs")+" · ⭐ "+opp.modifierCount+(shields?" · "+shields:"")+'</span><span class="opp-score">You '+v.you.pairs.length+" — "+opp.pairs.length+"</span>";
+       left, the pair score on the right. The separate score chip is gone.
+       FIX v22 (Bug 4): "cards" is ALL cards held (fish + modifiers),
+       matching the hand header's total — cardCount alone is fish only. */
+    els.oppChip.innerHTML = '<span class="opp-avatar">'+esc(initial)+onlineDot+'</span><span class="opp-meta"><b>'+esc(opp.name)+"</b> · "+(opp.cardCount+(opp.modifierCount||0))+" cards · "+opp.pairs.length+(opp.pairs.length===1?" pair":" pairs")+" · ⭐ "+opp.modifierCount+(shields?" · "+shields:"")+'</span><span class="opp-score">You '+v.you.pairs.length+" — "+opp.pairs.length+"</span>";
   }
   /* Conversation strip typing state: while the CPU thinks, your ask is
      already in the strip and the Computer's typing dots run there; the
@@ -2622,7 +2644,7 @@ function render(){
      and the pill is the current moment, not a leftover). When the
      game ends, the pill clears too; the end banner is the game-over
      moment, not the last pair's. */
-  if(v.phase==="finished"){ if(els.pairOverlay) els.pairOverlay.classList.remove("show"); if(pairOverlayTimer){ clearTimeout(pairOverlayTimer); pairOverlayTimer=null; } }
+  if(v.phase==="finished"){ if(els.pairOverlay) els.pairOverlay.classList.remove("show"); lastPillPid=null; if(pairOverlayTimer){ clearTimeout(pairOverlayTimer); pairOverlayTimer=null; } }
   else if(wasMyTurn!==v.yourTurn && !(ev && ev.pairId)) clearPairCelebration();
   if(v.yourTurn && !wasMyTurn && v.phase==="playing" && mode!=="solo") Sound.turn();
   wasMyTurn=v.yourTurn;
@@ -2840,7 +2862,20 @@ function fxFrameNow(){ return (window.SceneFX && SceneFX.frame) ? SceneFX.frame(
 function fxFramesSince(f0,w0){ var wall=Math.floor((Date.now()-w0)/16.667); if(window.SceneFX && SceneFX.frame) return Math.max(SceneFX.frame()-f0, wall); return wall; }
 var busyReleaseStartFrame=0, busyReleaseStartWall=0;
 function releaseBusyWhenFxDone(){
-  if(mode!=="solo" || !S){ busy=false; busyReleaseStartFrame=0; busyReleaseStartWall=0; return; }
+  /* FIX v22 (Bug 1 — live ask buttons stuck disabled at turn start):
+     the solo branch below re-renders after clearing busy so the hand
+     re-enables, but this live branch only cleared the lock. The
+     turn-start render had run while busy=true (the deferred-FX pass
+     holds it while the event's words show), so the fish buttons were
+     painted disabled — and with no re-render after the release, they
+     STAYED disabled until the next view or interaction (opening a
+     mod popup re-rendered and "fixed" it). Re-render on the next
+     tick so the hand re-enables the moment the lock clears.
+     setTimeout keeps it out of any render() call stack (fireShownFx
+     can run synchronously from inside render via the stale-deferral
+     fire). render() is safe to repeat: the event seq guard means no
+     event re-fires, and render() itself returns early on a null view. */
+  if(mode!=="solo" || !S){ busy=false; busyReleaseStartFrame=0; busyReleaseStartWall=0; setTimeout(render, 0); return; }
   /* ANIM PASS (8) FIX: the turn already passed to the CPU — hand the
      lock over instead of dropping it. maybeCpu only starts the CPU gate
      when !busy, and nothing else re-invokes it, so returning here with

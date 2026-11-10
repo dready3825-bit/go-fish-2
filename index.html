@@ -639,7 +639,7 @@
       <button class="btn btn-primary btn-block" id="soloBtn">🎣 Play vs the Computer</button>
       <button class="btn btn-block" id="installBtn" style="display:none">📲 How to install</button>
       <div id="liveNotice" role="status"></div>
-      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v25</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v26</div>
       <div class="divider">Play a friend live</div>
       <p style="font-size:13.5px;color:var(--ink-soft);margin:4px 2px 10px;line-height:1.55;text-align:left">Send your friend this app's link — https://dready3825-bit.github.io/go-fish-2/ — they can install it too. One of you taps <b>Create a room</b> and gets a short 6-letter code — tell your friend the code, they type it in below and tap <b>Join room</b>. That's it — no long codes to copy and paste.</p>
 
@@ -2031,6 +2031,12 @@ var drawNoteText=""; /* v24 TIMING (sticky note): the draw note's TEXT, captured
 function drawNoteTextFor(ev){
   if(!ev || ev.actor!=="you") return "";
   if(ev.kind==="reel" && ev.pairId) return "🪝 Reel In — the "+pairLabel(ev.pairId)+" moved from their pile into YOUR pair pile.";
+  if(ev.kind==="snatch" && ev.drawnCard && ev.pairId) return "🎉 You stole the "+cardFace(ev.drawnCard)+" from their hand — that completes your "+pairLabel(ev.pairId)+"! Pair banked.";
+  if(ev.kind==="snatch" && ev.drawnCard) return "🎣 You stole the "+cardFace(ev.drawnCard)+" from their hand.";
+  if(ev.kind==="magnet" && ev.drawnCard && ev.pairId) return "🎉 You ripped the "+cardFace(ev.drawnCard)+" from their hand — that completes your "+pairLabel(ev.pairId)+"! Pair banked.";
+  if(ev.kind==="magnet" && ev.drawnCard) return "🎣 You ripped the "+cardFace(ev.drawnCard)+" from their hand.";
+  if(ev.kind==="goldie" && ev.goldieWhere==="hand" && ev.drawnCard && ev.pairId) return "🎉 Goldie snatched the "+cardFace(ev.drawnCard)+" from their hand — that completes your "+pairLabel(ev.pairId)+"! Pair banked.";
+  if(ev.kind==="goldie" && ev.goldieWhere==="hand" && ev.drawnCard) return "🎣 Goldie snatched the "+cardFace(ev.drawnCard)+" from their hand.";
   if(ev.drawnCard && ev.pairId) return "🎉 You drew the "+cardFace(ev.drawnCard)+" from the pond — that completes your "+pairLabel(ev.pairId)+"! Pair banked.";
   if(ev.drawnCard) return "🎣 You drew the "+cardFace(ev.drawnCard)+" from the pond.";
   if(ev.drawnMod) return "🎣 You drew the "+(MODIFIER_INFO[ev.drawnMod]?MODIFIER_INFO[ev.drawnMod].name:ev.drawnMod)+" modifier from the pond."; /* FIELD NAME: the view's lastEvent exposes the engine's drewMod as drawnMod (buildView) — reading drewMod here silently never matched, so a modifier draw showed no note at all (NOTE_MISSING). */

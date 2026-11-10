@@ -639,7 +639,7 @@
       <button class="btn btn-primary btn-block" id="soloBtn">🎣 Play vs the Computer</button>
       <button class="btn btn-block" id="installBtn" style="display:none">📲 How to install</button>
       <div id="liveNotice" role="status"></div>
-      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v23</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v24</div>
       <div class="divider">Play a friend live</div>
       <p style="font-size:13.5px;color:var(--ink-soft);margin:4px 2px 10px;line-height:1.55;text-align:left">Send your friend this app's link — https://dready3825-bit.github.io/go-fish-2/ — they can install it too. One of you taps <b>Create a room</b> and gets a short 6-letter code — tell your friend the code, they type it in below and tap <b>Join room</b>. That's it — no long codes to copy and paste.</p>
 
@@ -1832,8 +1832,13 @@ function bubblesFor(ev,v){
            exact. The old pairRank!==rank clause is dropped: a haul
            pair of the SAME rank as the ask (drew the exact mate, or
            its same-rank other-colour mate) is still a haul pair. */
+        /* v24 (Jenna: the strip read "YOU: Go Fish! The haul paired…" —
+           as if the DRAWER was saying "Go Fish!" to the opponent. "Go
+           Fish!" is the DENIAL — only the player WITHOUT the card says
+           it. The drawer announces the haul in the first person, and
+           the pair still visibly belongs to the haul, not to the ask. */
         if((ev.drawnCardId || ev.drew) && ev.rank){
-          pl = "Go Fish! The haul paired the " + (ev.pairId ? pairLabel(ev.pairId) : ev.pairRank+"s") + "! 🎉";
+          pl = "My haul paired the " + (ev.pairId ? pairLabel(ev.pairId) : ev.pairRank+"s") + "! 🎉";
         }
         set(ev.actor, pl);
       }
@@ -2018,6 +2023,31 @@ function isMissDrawEvent(ev){
   return !!ev && (ev.kind==="ask_miss" || ev.kind==="fish_wish" || (ev.kind==="pair" && !!ev.drew));
 }
 var deferredFx=null; /* { seq, ev, v, S, timer, startedAt } — one pending go-fish presentation */
+var drawNoteReadySeq=0; /* v24 TIMING: seq of the event whose 3D draw animation has actually fired — the draw note (render) only shows for that seq, so the words never appear before the cast plays. Set in fireDeferredFx / fireShownFx / the immediate FX path; reset in clearStrip. */
+var drawNoteText=""; /* v24 TIMING (sticky note): the draw note's TEXT, captured at FX-fire time from the event itself (releaseDrawNote). render() displays this stored text instead of recomputing it from the CURRENT lastEvent — a new event arriving between the FX firing and the next render used to clobber the note (the gate compared the new event's seq to the old released seq), so ~1 in 4 draws showed no note at all (NOTE_MISSING in the 15-game test). The text is cleared when a new event is dispatched and in clearStrip, so a stale note never lingers. */
+/* v24 TIMING: compute the draw-note text for one event (actor "you" only). Same wording as Fix A. */
+function drawNoteTextFor(ev){
+  if(!ev || ev.actor!=="you") return "";
+  if(ev.kind==="reel" && ev.pairId) return "🪝 Reel In — the "+pairLabel(ev.pairId)+" moved from their pile into YOUR pair pile.";
+  if(ev.drawnCard && ev.pairId) return "🎉 You drew the "+cardFace(ev.drawnCard)+" from the pond — that completes your "+pairLabel(ev.pairId)+"! Pair banked.";
+  if(ev.drawnCard) return "🎣 You drew the "+cardFace(ev.drawnCard)+" from the pond.";
+  if(ev.drawnMod) return "🎣 You drew the "+(MODIFIER_INFO[ev.drawnMod]?MODIFIER_INFO[ev.drawnMod].name:ev.drawnMod)+" modifier from the pond."; /* FIELD NAME: the view's lastEvent exposes the engine's drewMod as drawnMod (buildView) — reading drewMod here silently never matched, so a modifier draw showed no note at all (NOTE_MISSING). */
+  return "";
+}
+/* v24 TIMING: release the draw note for the event whose 3D draw animation
+   fires NOW. Captures the text from the event and writes it to the DOM
+   synchronously (so the words land with the cast even if the next render
+   is a frame or two late), stores it for render() to preserve, and
+   re-renders. Callers: fireDeferredFx / fireShownFx / immediate FX path. */
+function releaseDrawNote(ev){
+  drawNoteReadySeq=ev.seq;
+  drawNoteText=drawNoteTextFor(ev);
+  if(els.drawNote){
+    els.drawNote.style.display = drawNoteText ? "block" : "none";
+    if(drawNoteText) els.drawNote.textContent = drawNoteText;
+  }
+  setTimeout(render, 0);
+}
 function fireDeferredFx(){
   if(!deferredFx) return;
   var d=deferredFx; deferredFx=null;
@@ -2035,6 +2065,9 @@ function fireDeferredFx(){
      deferral via clearStrip). */
   if(S && S!==d.S) return;
   if(!view) return;
+  /* v24 TIMING: the draw animation fires NOW — release the draw note
+     for this event so its words land with the cast, then re-render. */
+  releaseDrawNote(d.ev);
   /* FX DELIVERY ISOLATION (Jenna, real play: "my Storm Surge shows
      nothing at all"): the sound, the 3D animation and the pair
      celebration fire as INDEPENDENT steps — a throw in any one of
@@ -2081,6 +2114,9 @@ function fireShownFx(){
   if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false);
   if(S && S!==d.S) return;
   if(!view) return;
+  /* v24 TIMING: the draw animation fires NOW — release the draw note
+     for this event so its words land with the visuals, then re-render. */
+  releaseDrawNote(d.ev);
   /* FX DELIVERY ISOLATION: see fireDeferredFx — sound, scene and
      celebration are independent steps; no one throw eats the rest. */
   try{ Sound.event(d.ev.kind, d.ev.drew); }catch(e){}
@@ -2139,7 +2175,7 @@ function showStripTyping(name){
   if(stripTypingEl && stripTypingEl.parentNode===els.convoStrip) return;
   stripTypingEl=setStripBar("cmsg typing opp", "opponent", name, '💭 Thinking<span class="dots"></span>');
 }
-function clearStrip(){ clearPairCelebration(); /* a new game / leaving sweeps any stale PAIR! pill + confetti with the strip */ if(els.convoStrip) els.convoStrip.innerHTML=""; stripBarEl=null; stripTypingEl=null; stripDotsEl=null; stripPendingShown=null; stripAskTextShown=null; stripQueue=[]; stripShownAt=0; stripCurrentHold=STRIP_MIN_MS; if(stripTimer){ clearTimeout(stripTimer); stripTimer=null; } busy=false; /* NEW ITEM 4: a stranded input lock dies with the strip on a new game / leave */ stripDenialSeq=0; stripDenialShownAt=0; /* FIX ROUND 4 (1): a new game / leaving abandons any go-fish presentation still waiting on its denial — the old draw must not play in the new game. */ if(deferredFx){ var pd=deferredFx; deferredFx=null; if(pd.timer) clearTimeout(pd.timer); if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false); } if(deferredShownFx){ var ps=deferredShownFx; deferredShownFx=null; if(ps.timer) clearTimeout(ps.timer); if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false); } stripEventSeq=0; stripEventShownAt=0; }
+function clearStrip(){ clearPairCelebration(); /* a new game / leaving sweeps any stale PAIR! pill + confetti with the strip */ if(els.convoStrip) els.convoStrip.innerHTML=""; stripBarEl=null; stripTypingEl=null; stripDotsEl=null; stripPendingShown=null; stripAskTextShown=null; stripQueue=[]; stripShownAt=0; stripCurrentHold=STRIP_MIN_MS; if(stripTimer){ clearTimeout(stripTimer); stripTimer=null; } busy=false; /* NEW ITEM 4: a stranded input lock dies with the strip on a new game / leave */ stripDenialSeq=0; stripDenialShownAt=0; /* FIX ROUND 4 (1): a new game / leaving abandons any go-fish presentation still waiting on its denial — the old draw must not play in the new game. */ if(deferredFx){ var pd=deferredFx; deferredFx=null; if(pd.timer) clearTimeout(pd.timer); if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false); } if(deferredShownFx){ var ps=deferredShownFx; deferredShownFx=null; if(ps.timer) clearTimeout(ps.timer); if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false); } stripEventSeq=0; stripEventShownAt=0; drawNoteReadySeq=0; drawNoteText=""; /* v24 TIMING: a new game / leave drops any released draw note with the strip */ }
 function pushEventToStrip(ev,v){
   if(!ev || !v) return 0;
   var _pc0=stripPushCount; /* TIMING PASS: report how many messages this event added */
@@ -2158,7 +2194,7 @@ function pushEventToStrip(ev,v){
   var bs=bubblesFor(ev, v);
   var order = ev.actor==="you" ? ["you","opponent"] : ["opponent","you"];
   var pushed=0;
-  order.forEach(function(w){ if(bs[w]){ if(stripAskTextShown && bs[w].text===stripAskTextShown){ stripAskTextShown=null; return; } /* FIX ROUND 4 (1): the denial bubble is the one the draw waits for — tag it with the event seq so pumpStrip can stamp when it takes the bar. */ var dTag=null; if(bs[w].text.indexOf("Nope, don't have that one")===0 || bs[w].text.indexOf("Go Fish! The haul paired")===0) dTag="denial"; pushStripMsg(w, bs[w].name, bs[w].text, dTag, ev.seq); pushed++; } });
+  order.forEach(function(w){ if(bs[w]){ if(stripAskTextShown && bs[w].text===stripAskTextShown){ stripAskTextShown=null; return; } /* FIX ROUND 4 (1): the denial bubble is the one the draw waits for — tag it with the event seq so pumpStrip can stamp when it takes the bar. */ var dTag=null; if(bs[w].text.indexOf("Nope, don't have that one")===0 || bs[w].text.indexOf("My haul paired")===0) dTag="denial"; pushStripMsg(w, bs[w].name, bs[w].text, dTag, ev.seq); pushed++; } });
   var isMod = !!(KIND_TO_MOD[ev.kind] || ev.kind==="blocked");
   if(isMod || ev.kind==="start" || !pushed){
     if(ev.text) pushStripMsg(ev.actor, actorName, ev.text, null, ev.seq);
@@ -2487,21 +2523,24 @@ function render(){
       els.handHint.className="hand-hint";
     }
   }
-  /* DRAW DESTINATION NOTE: every card you draw or fish for — a Go Fish
-     haul or any draw modifier (Double Cast, Lucky Lure, Pond Monster,
-     Swap Bait, Blind Snatch, Magnet Hook, Goldie's Gift) — lands in
-     YOUR hand, or in
-     YOUR pair pile when it pairs. Say so, naming the card, in the same
-     render that moves it, so a draw can never read as feeding the
-     opponent (whose own separate turn-start draw is a different card). */
+  /* DRAW DESTINATION NOTE (v24 wording — Jenna: "Your card" read as a
+     card she already had, not one she just drew): every card you draw
+     or fish for — a Go Fish haul or any draw modifier (Double Cast,
+     Lucky Lure, Pond Monster, Swap Bait, Blind Snatch, Magnet Hook,
+     Goldie's Gift) — lands in YOUR hand, or in YOUR pair pile when it
+     pairs. Say so in plain words, naming the card. TIMING (v24): the
+     note is gated on drawNoteReadySeq — it only shows once the event's
+     3D draw animation has actually fired (fireDeferredFx /
+     fireShownFx / the immediate path set the flag), never in the
+     first render of the view, which used to put the words up 1–2s
+     before the cast played. STICKY NOTE (v24, NOTE_MISSING fix): the
+     text itself is captured at FX-fire time (releaseDrawNote) and
+     stored in drawNoteText — render() displays the stored text, it
+     does NOT recompute it from the current lastEvent, because a new
+     event arriving between the FX and the next render used to
+     clobber the note (NOTE_MISSING: ~1 in 4 draws showed nothing). */
   if(els.drawNote){
-    var dnText="", dnEv=v.lastEvent;
-    if(dnEv && dnEv.actor==="you" && v.phase==="playing"){
-      if(dnEv.kind==="reel" && dnEv.pairId) dnText="🪝 Reel In — the "+pairLabel(dnEv.pairId)+" moved from their pile into YOUR pair pile.";
-      else if(dnEv.drawnCard && dnEv.pairId) dnText="🎉 The "+cardFace(dnEv.drawnCard)+" completed your "+pairLabel(dnEv.pairId)+" — banked in YOUR pair pile.";
-      else if(dnEv.drawnCard) dnText="🎣 Your card: the "+cardFace(dnEv.drawnCard)+" — it is in YOUR hand now.";
-      else if(dnEv.drewMod) dnText="🎣 Your draw: the "+(MODIFIER_INFO[dnEv.drewMod]?MODIFIER_INFO[dnEv.drewMod].name:dnEv.drewMod)+" modifier — it is in YOUR hand now (the ★ Mod card).";
-    }
+    var dnText = (v.phase==="playing") ? drawNoteText : "";
     els.drawNote.style.display = dnText ? "block" : "none";
     if(dnText) els.drawNote.textContent = dnText;
   }
@@ -2567,6 +2606,7 @@ function render(){
     }
     var first = lastSeqSeen===0;
     lastSeqSeen=ev.seq;
+    drawNoteText=""; /* v24 STICKY NOTE: a new event supersedes the previous draw note — the old text must not linger into the new event. The new event's own note is set when its FX fires (releaseDrawNote). */
     if(!first){
       /* FIX ROUND 4 (1): a stale go-fish presentation (its denial was
          still being read when this event landed — live play) fires now
@@ -2598,6 +2638,11 @@ function render(){
         if(pushedN>0){
           deferShownFxUntilStrip(ev, v);
         } else {
+        /* v24 TIMING: FX fires in this same tick — release the draw note
+           for this event and re-render so its words land with the
+           animation, not before it (the note was computed earlier in
+           this render, before the dispatch, so it needs the next tick). */
+        releaseDrawNote(ev);
         /* FX DELIVERY ISOLATION: see fireDeferredFx — independent steps. */
         try{ Sound.event(ev.kind, ev.drew); }catch(e){}
         try{ if(window.SceneFX) SceneFX.trigger(ev, v); }catch(e){}

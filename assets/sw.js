@@ -5,7 +5,7 @@
    is never cached. Note: for the worker to control the page it must sit
    next to index.html when deployed at a site root; the page registers it
    defensively and plays fine without it. */
-var CACHE = "gofish2-v20";
+var CACHE = "gofish2-v21";
 var SHELL = ["../index.html"];
 self.addEventListener("install", function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) {

@@ -639,7 +639,7 @@
       <button class="btn btn-primary btn-block" id="soloBtn">🎣 Play vs the Computer</button>
       <button class="btn btn-block" id="installBtn" style="display:none">📲 How to install</button>
       <div id="liveNotice" role="status"></div>
-      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v20</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v21</div>
       <div class="divider">Play a friend live</div>
       <p style="font-size:13.5px;color:var(--ink-soft);margin:4px 2px 10px;line-height:1.55;text-align:left">Send your friend this app's link — https://dready3825-bit.github.io/go-fish-2/ — they can install it too. One of you taps <b>Create a room</b> and gets a short 6-letter code — tell your friend the code, they type it in below and tap <b>Join room</b>. That's it — no long codes to copy and paste.</p>
 
@@ -3458,8 +3458,27 @@ var SceneFX = (function(){
        frame while her angler still clears the bottom cluster. Top /
        Low untouched; FOV and vo unchanged. */
     angled:{ base:[0,18.1,24.62], tgt:[0,-0.6,3.9], fov:63, vo:0.03 },
-    low:   { base:[0,4.32,22.7],  tgt:[0,0.0,2.0],  fov:57, vo:0.04 }
+    low:   { base:[0,4.32,22.7],  tgt:[0,0.0,2.0],  fov:57, vo:0.04, s1base:[0,12.0,28.0] }
   };
+  /* SEAT-1 PULL-BACK (Jenna 2026-11-09: from the boat side "that big ass
+     boat" dominates the frame and the angle is awkward). For the
+     joining seat only, the camera dollies out along its view axis by
+     this factor, so the boat shrinks, more pond and background show,
+     and the framing matches the pier side. Seat 0 presets are
+     untouched — the solo screenshots are the target look. Applied in
+     tick() where the camera base is built; view direction, FOV, vo
+     and HUD clearances are unchanged (the pull-back only moves the
+     scene toward the lookAt centre, which improves clearances).
+     LOW is the exception: a plain dolly-out drives the low camera
+     into the north hill (the hill surface at the pulled-back spot is
+     above the camera), so Low carries an s1base override instead —
+     pulled back AND raised to (0,12.0,28.0), clear of the hill by
+     ~6.3 and clear of the north tree line (the tree at (1,-25.5)
+     sits below the frame at that height — verified by raycast after
+     (0,9,28) and (4,9,28) both caught a tree in the frame). Tilt
+     ~25° below horizontal, still a low close view, pond visible
+     over the boat on both sides. */
+  var SEAT1_PULL=1.20;
   var wrapAspect=1, wrapW=0, wrapHpx=0;
   function applyFrustum(){
     if(!camera) return;
@@ -5335,6 +5354,17 @@ var SceneFX = (function(){
       bakeTreeParts(treeParts(ti, ti2%3===2), p[0], p[1], 0.95+rnd(ti*41)*0.6);
       // (static like the main tree line — see the Phase 2 note above)
     });
+    /* 360-DEGREE BACKGROUND (Jenna 2026-11-09: from the boat side the
+       background behind the pier was a blank green wasteland — all the
+       trees, the hill and the horizon border lived on the north side
+       only). Mirror the dense tree line to the SOUTH bank, same seeds
+       so it is an exact mirror of the north line. Baked into the same
+       treeBuckets, so 0 new draw calls. The pier runs x -3.85..3.85,
+       z 8..17.5; the nearest south trees sit at z>=24, clear of it. */
+    [[-19,15],[-14,20],[-9,23],[-4,25],[1,25.5],[6,24],[11,22],[16,19.5],[21,13],[-22,8],[23,7],[-12,17.5],[-16.5,18],[-6.5,24.5],[3.5,25.2],[13.5,21],[19,16],[-21,11.5]].forEach(function(p,ti2){
+      var ti=100+ti2;
+      bakeTreeParts(treeParts(ti, ti2%3===2), p[0], p[1], 0.95+rnd(ti*41)*0.6);
+    });
     treeBuckets.forEach(function(b){ var tm=new THREE.Mesh(mergeGeos(b.geos), b.mat); tm.castShadow=false; scene.add(tm); });
     // FOUNDATION PASS: a low green hillside ridge behind the far bank —
     // one squashed sphere, one draw call — so the top of the Angled
@@ -5342,6 +5372,12 @@ var SceneFX = (function(){
     // of flat blue sky showing through the gaps
     var hill=new THREE.Mesh(new THREE.SphereGeometry(1,24,12), mat(0x6f9a58,{map:grassTex, roughness:1})); // PHASE 3 grass unification: hill tint = the bank's 0x6f9a58 (was 0x4d7a35, a different green)
     hill.scale.set(46,8.5,10); hill.position.set(0,-2.6,-30); hill.castShadow=false; scene.add(hill); // CORRECTION (Jenna 17:19): the hill now wears the shared grass texture — as a flat untextured shell it was the "less rendered background" half of the cutoff
+    /* 360-DEGREE BACKGROUND (Jenna 2026-11-09): the south hill, mirror of
+       the north one — same sphere, same grass texture/tint, same scale —
+       so the background behind the pier reads as green hillside, not
+       flat sky. +1 draw call. */
+    var hillS=new THREE.Mesh(new THREE.SphereGeometry(1,24,12), mat(0x6f9a58,{map:grassTex, roughness:1}));
+    hillS.scale.set(46,8.5,10); hillS.position.set(0,-2.6,30); hillS.castShadow=false; scene.add(hillS);
     /* CORRECTION (Jenna 17:19): blend the bank to the top edge — no flat
        bare background plane and no hard horizon cutoff.
        (a) FAR GROUND: one big grass disc under everything, out past the
@@ -5373,13 +5409,16 @@ var SceneFX = (function(){
     var pondBed=new THREE.Mesh(new THREE.CircleGeometry(4.8,28), new THREE.MeshBasicMaterial({ color:0x2b7fc9 }));
     pondBed.rotation.x=-Math.PI/2; pondBed.position.y=-1.15; pondBed.castShadow=false; scene.add(pondBed);
     (function(){
-      function hillY(x,z){ var q=1-(x/46)*(x/46)-((z+30)/10)*((z+30)/10); return q>0 ? -2.6+8.5*Math.sqrt(q) : -0.2; }
+      /* 360-DEGREE BACKGROUND (Jenna 2026-11-09): hillY now takes the
+         hill centre z (north hill cz=-30, south hill cz=+30) so the
+         horizon border can be mirrored to the south bank too. */
+      function hillY(x,z,cz){ cz=(cz===undefined?-30:cz); var q=1-(x/46)*(x/46)-((z-cz)/10)*((z-cz)/10); return q>0 ? -2.6+8.5*Math.sqrt(q) : -0.2; }
       var bk={ trunk:[], pine:[], leaf:[], bush:[], stone:[], stalk:[], tip:[] };
       function putB(bucket, geo, x,y,z, ry, s){
         bk[bucket].push(xformGeo(geo, x,y,z, 0,ry||0,0, s,s,s));
       }
-      function borderTree(x,z,s,leafy,seed){
-        var by=hillY(x,z)-0.55; // base sunk into the ridge
+      function borderTree(x,z,s,leafy,seed,cz){
+        var by=hillY(x,z,cz)-0.55; // base sunk into the ridge
         putB("trunk", new THREE.BoxGeometry(0.5,1.7,0.5), x, by+0.85*s, z, seed, s);
         if(leafy){
           putB("leaf", new THREE.SphereGeometry(1.55,8,7), x, by+3.6*s, z, 0, s);
@@ -5395,18 +5434,44 @@ var SceneFX = (function(){
       }
       // the ridge row: big trees crowning the hill, ends wrapping round
       [[-38,-27,2.0,0],[-32,-30,2.3,1],[-26,-31,1.9,0],[-20,-32,2.4,0],[-14,-30.5,2.0,1],[-8,-31.5,2.2,0],[-2,-30,2.5,0],[4,-31,2.1,1],[10,-32,2.3,0],[16,-30.5,2.0,0],[22,-31.5,2.4,1],[28,-30,1.9,0],[34,-28,2.2,0],[39,-25,2.0,1],[42,-18,1.9,0],[-42,-19,2.1,0]].forEach(function(tp,ti3){
-        borderTree(tp[0], tp[1], tp[2], tp[3]===1, ti3*0.7);
+        borderTree(tp[0], tp[1], tp[2], tp[3]===1, ti3*0.7, -30);
+      });
+      /* 360-DEGREE BACKGROUND: the south ridge row — exact mirror of the
+         north row (z negated, cz=+30), baked into the same buckets, so
+         0 new draw calls. */
+      [[-38,27,2.0,0],[-32,30,2.3,1],[-26,31,1.9,0],[-20,32,2.4,0],[-14,30.5,2.0,1],[-8,31.5,2.2,0],[-2,30,2.5,0],[4,31,2.1,1],[10,32,2.3,0],[16,30.5,2.0,0],[22,31.5,2.4,1],[28,30,1.9,0],[34,28,2.2,0],[39,25,2.0,1],[42,18,1.9,0],[-42,19,2.1,0]].forEach(function(tp,ti3){
+        borderTree(tp[0], tp[1], tp[2], tp[3]===1, ti3*0.7, 30);
       });
       // slope dressing: bushes + rocks scattered on the hill face and
       // along the ground at its feet, filling the gaps between the rows
       [[-29,-27.5],[-17,-28],[ -5,-28.5],[7,-27.8],[19,-28.2],[31,-26.5],[-36,-23],[36,-22],[0,-27],[-11,-27.2],[13,-27.4],[24,-24]].forEach(function(bp2,bi3){
-        var by2=hillY(bp2[0],bp2[1])-0.25, bs2=1.1+rnd(bi3*331)*0.9;
+        var by2=hillY(bp2[0],bp2[1],-30)-0.25, bs2=1.1+rnd(bi3*331)*0.9;
+        putB("bush", new THREE.DodecahedronGeometry(0.85,0), bp2[0], by2+0.3, bp2[1], bi3*1.1, bs2);
+        if(bi3%2===0) putB("stone", new THREE.DodecahedronGeometry(0.7,0), bp2[0]+1.6, by2+0.1, bp2[1]+0.7, bi3*0.9, 0.9+rnd(bi3*337)*0.7);
+        if(bi3%3===0) putB("stone", new THREE.DodecahedronGeometry(0.5,0), bp2[0]-1.4, by2+0.05, bp2[1]+0.4, bi3*1.7, 0.8+rnd(bi3*347)*0.5);
+      });
+      /* 360-DEGREE BACKGROUND: the south slope dressing — mirror of the
+         north one (z negated, cz=+30), same buckets, 0 new draw calls. */
+      [[-29,27.5],[-17,28],[ -5,28.5],[7,27.8],[19,28.2],[31,26.5],[-36,23],[36,22],[0,27],[-11,27.2],[13,27.4],[24,24]].forEach(function(bp2,bi3){
+        var by2=hillY(bp2[0],bp2[1],30)-0.25, bs2=1.1+rnd(bi3*331)*0.9;
         putB("bush", new THREE.DodecahedronGeometry(0.85,0), bp2[0], by2+0.3, bp2[1], bi3*1.1, bs2);
         if(bi3%2===0) putB("stone", new THREE.DodecahedronGeometry(0.7,0), bp2[0]+1.6, by2+0.1, bp2[1]+0.7, bi3*0.9, 0.9+rnd(bi3*337)*0.7);
         if(bi3%3===0) putB("stone", new THREE.DodecahedronGeometry(0.5,0), bp2[0]-1.4, by2+0.05, bp2[1]+0.4, bi3*1.7, 0.8+rnd(bi3*347)*0.5);
       });
       // cattail clumps on the far shoreline, where the bank meets water
       [[-8.5,-16.6],[5.5,-17.1],[0.5,-17.5],[-14.5,-14.8],[13.8,-15.2]].forEach(function(cp,ci3){
+        for(var ri5=0;ri5<3;ri5++){
+          var ch=1.5+rnd(ci3*353+ri5*31)*1.0, cx2=cp[0]+(ri5-1)*0.22, cz2=cp[1]+(rnd(ri5*359+ci3)-0.5)*0.35;
+          putB("stalk", new THREE.CylinderGeometry(0.032,0.05,ch,5), cx2, ch/2-0.15, cz2, 0, 1);
+          if(ri5%2===0) putB("tip", new THREE.CylinderGeometry(0.075,0.075,0.5,6), cx2, ch-0.3, cz2, 0, 1);
+        }
+      });
+      /* 360-DEGREE BACKGROUND: the south cattail clumps — mirror of the
+         north ones (z negated). The centre clump moves from x=0.5 to
+         x=4.8 so it does not grow through the pier's shore end
+         (pier runs x -3.85..3.85, z 8..17.5). Same buckets, 0 new
+         draw calls. */
+      [[-8.5,16.6],[5.5,17.1],[4.8,17.5],[-14.5,14.8],[13.8,15.2]].forEach(function(cp,ci3){
         for(var ri5=0;ri5<3;ri5++){
           var ch=1.5+rnd(ci3*353+ri5*31)*1.0, cx2=cp[0]+(ri5-1)*0.22, cz2=cp[1]+(rnd(ri5*359+ci3)-0.5)*0.35;
           putB("stalk", new THREE.CylinderGeometry(0.032,0.05,ch,5), cx2, ch/2-0.15, cz2, 0, 1);
@@ -6542,6 +6607,7 @@ var SceneFX = (function(){
     // which the pier angler projected behind the bottom HUD.)
     var P=CAM_PRESETS[preset]||CAM_PRESETS.angled;
     var base=new THREE.Vector3(P.base[0], P.base[1], P.base[2]*sgn);
+    if(seat===1){ if(P.s1base){ base.set(P.s1base[0], P.s1base[1], P.s1base[2]*sgn); } else { var tgtV=new THREE.Vector3(0, P.tgt[1], P.tgt[2]*sgn); base.sub(tgtV).multiplyScalar(SEAT1_PULL).add(tgtV); } } // seat-1 framing: s1base override if present (Low — a plain dolly-out would drive the low camera into the north hill), else dolly out along the view axis (see SEAT1_PULL above)
     var r=base.length(), theta=Math.atan2(base.x,base.z)+yaw, phi=Math.acos(base.y/r)+pitchOff;
     phi=Math.max(0.12, Math.min(1.45, phi));
     camera.position.set(r*Math.sin(phi)*Math.sin(theta), r*Math.cos(phi), r*Math.sin(phi)*Math.cos(theta));

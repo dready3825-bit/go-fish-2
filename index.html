@@ -639,7 +639,7 @@
       <button class="btn btn-primary btn-block" id="soloBtn">🎣 Play vs the Computer</button>
       <button class="btn btn-block" id="installBtn" style="display:none">📲 How to install</button>
       <div id="liveNotice" role="status"></div>
-      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v22</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v23</div>
       <div class="divider">Play a friend live</div>
       <p style="font-size:13.5px;color:var(--ink-soft);margin:4px 2px 10px;line-height:1.55;text-align:left">Send your friend this app's link — https://dready3825-bit.github.io/go-fish-2/ — they can install it too. One of you taps <b>Create a room</b> and gets a short 6-letter code — tell your friend the code, they type it in below and tap <b>Join room</b>. That's it — no long codes to copy and paste.</p>
 
@@ -703,7 +703,7 @@
       <!-- IN-SCENE POP-UP: the pair celebration floats at the
            top-centre INSIDE the visual window. There is no mod banner
            any more — the strip + 3D animation carry every mod. -->
-      <div id="pairOverlay" aria-live="polite"><div class="pair-overlay-inner"><div class="pair-overlay-title">PAIR!</div><div class="pair-overlay-sub" id="pairOverlaySub"></div><div class="pair-overlay-who" id="pairOverlayWho"></div><div class="pair-sparkles" aria-hidden="true">✨ ⭐ ✨</div></div></div>
+      <div id="pairOverlay" aria-live="polite" aria-hidden="true"><div class="pair-overlay-inner"><div class="pair-overlay-title">PAIR!</div><div class="pair-overlay-sub" id="pairOverlaySub"></div><div class="pair-overlay-who" id="pairOverlayWho"></div><div class="pair-sparkles" aria-hidden="true">✨ ⭐ ✨</div></div></div>
       <div id="sceneFallback"><span>🌊 🎣 🌀 🎣 🚣<br/>The 3D pond couldn't start on this device — the game below still plays exactly the same.</span><button id="sceneReloadBtn" type="button">Reload the pond</button></div>
       <div id="hudBottom">
         <div class="cam-presets" role="group" aria-label="Camera view">
@@ -2227,7 +2227,7 @@ function privateIntelLine(v){
    of lingering on screen (and into the next game) as the test games
    found them doing. */
 function clearPairCelebration(){
-  if(els.pairOverlay) els.pairOverlay.classList.remove("show");
+  if(els.pairOverlay){ els.pairOverlay.classList.remove("show"); els.pairOverlay.setAttribute("aria-hidden","true"); /* FIX v23 (a11y): the pill is hidden by opacity, not display — without aria-hidden the "PAIR!" text stays in the accessibility tree even when invisible. */ }
   lastPillPid=null; /* FIX v22 (Bug 2): the guard tracks the pill that is
     up — once the pill is swept, the next celebration of any pair may
     show it again. */
@@ -2305,11 +2305,12 @@ function celebratePair(v, ev){
     lastPillPid=pid;
     els.pairOverlaySub.textContent = label;
     els.pairOverlayWho.textContent = (yours ? "You banked a pair!" : whoName+" banked a pair");
+    els.pairOverlay.removeAttribute("aria-hidden"); /* FIX v23 (a11y): expose the pill to assistive tech only while it is showing. */
     els.pairOverlay.classList.remove("show");
     void els.pairOverlay.offsetWidth;
     els.pairOverlay.classList.add("show");
     clearTimeout(pairOverlayTimer);
-    pairOverlayTimer=setTimeout(function(){ els.pairOverlay.classList.remove("show"); lastPillPid=null; }, 2400);
+    pairOverlayTimer=setTimeout(function(){ els.pairOverlay.classList.remove("show"); els.pairOverlay.setAttribute("aria-hidden","true"); lastPillPid=null; }, 2400);
   }
   /* Pile pop + badge jump + score pulse */
   var pileEl = yours ? els.youPile : els.oppPile;
@@ -3493,7 +3494,7 @@ var SceneFX = (function(){
        frame while her angler still clears the bottom cluster. Top /
        Low untouched; FOV and vo unchanged. */
     angled:{ base:[0,18.1,24.62], tgt:[0,-0.6,3.9], fov:63, vo:0.03 },
-    low:   { base:[0,4.32,22.7],  tgt:[0,0.0,2.0],  fov:57, vo:0.04, s1base:[0,12.0,28.0] }
+    low:   { base:[0,4.32,22.7],  tgt:[0,0.0,2.0],  fov:57, vo:0.04, s1base:[0,14.0,30.0] } // FIX v23: seat-1 Low pulled back along its view axis (was (0,12.0,28.0) at SEAT1_PULL 1.20). (0,14,33) was tried first and is BROKEN — it drives the camera into a horizon-border tree due north at z≈-30.5 (solid green wall, verified by sweep: z=30 clear, z=31 blocked). (0,14,30) is the furthest safe point on this axis: ~9% further from the boat than v21, same Low tilt, verified clear. Do NOT move it further north without re-sweeping the tree line.
   };
   /* SEAT-1 PULL-BACK (Jenna 2026-11-09: from the boat side "that big ass
      boat" dominates the frame and the angle is awkward). For the
@@ -3507,13 +3508,17 @@ var SceneFX = (function(){
      LOW is the exception: a plain dolly-out drives the low camera
      into the north hill (the hill surface at the pulled-back spot is
      above the camera), so Low carries an s1base override instead —
-     pulled back AND raised to (0,12.0,28.0), clear of the hill by
-     ~6.3 and clear of the north tree line (the tree at (1,-25.5)
+     pulled back AND raised to (0,14.0,30.0) in v23 (was (0,12.0,28.0)
+     at SEAT1_PULL 1.20). (0,14,33) was tried first and is BROKEN: it
+     drives the camera into a horizon-border tree due north at
+     z≈-30.5 (solid green wall — sweep: z=30 clear, z=31 blocked).
+     (0,14,30) is the furthest safe point on this axis. Clear of the
+     hill and clear of the north tree line (the tree at (1,-25.5)
      sits below the frame at that height — verified by raycast after
      (0,9,28) and (4,9,28) both caught a tree in the frame). Tilt
      ~25° below horizontal, still a low close view, pond visible
      over the boat on both sides. */
-  var SEAT1_PULL=1.20;
+  var SEAT1_PULL=1.40; // FIX v23 (Jenna: "player 2 in the boat is so big in comparison to the guy on the pier"): seat-1 pull-back raised from 1.20 so the boat takes up less of the frame and more pond + pier show. Seat 0 presets untouched.
   var wrapAspect=1, wrapW=0, wrapHpx=0;
   function applyFrustum(){
     if(!camera) return;
@@ -3585,10 +3590,10 @@ var SceneFX = (function(){
      being checked against a box covering barely a third of the boat, so
      they landed on the bow and stern unchecked. The test is now done in
      the boat's own local space (rotate the point by -0.31 around the
-     berth at (-1.1,-7.6), then compare against the scaled hull extents
+     berth at (-1.24,-9.14), then compare against the scaled hull extents
      with a small margin) — it hugs the actual hull instead of a stale
      axis-aligned guess. */
-  var BOAT_BOX={ cx:-1.1, cz:-7.6, cos:Math.cos(0.31), sin:Math.sin(0.31), lx0:-7.6, lx1:10.3, lz:3.9, top:1.1 };
+  var BOAT_BOX={ cx:-1.24, cz:-9.14, cos:Math.cos(0.31), sin:Math.sin(0.31), lx0:-7.6, lx1:10.3, lz:3.9, top:1.1 }; // FIX v23 (symmetry — Jenna: both characters equidistant from the pond centre): berth moved back from (-1.1,-7.6) to (-1.24,-9.14) so the boat character sits 8.95 from the centre, same as the pier character
   function overBoat(x,z){
     var dx=x-BOAT_BOX.cx, dz=z-BOAT_BOX.cz;
     var lx=dx*BOAT_BOX.cos-dz*BOAT_BOX.sin, lz=dx*BOAT_BOX.sin+dz*BOAT_BOX.cos;
@@ -4984,9 +4989,9 @@ var SceneFX = (function(){
     // soft reflections on the surface: a dark soft shape + a light shimmer
     // streak under the boat, and a long soft reflection under the dock
     var boatReflection=new THREE.Mesh(new THREE.CircleGeometry(4.4,28), new THREE.MeshBasicMaterial({ color:0x083a5e, transparent:true, opacity:0.34, depthWrite:false }));
-    boatReflection.rotation.x=-Math.PI/2; boatReflection.position.set(-1.1,0.032,-7.6); boatReflection.scale.set(1.25,0.72,1); boatReflection.rotation.z=-0.31; scene.add(boatReflection);
+    boatReflection.rotation.x=-Math.PI/2; boatReflection.position.set(-1.24,0.032,-9.14); boatReflection.scale.set(1.25,0.72,1); boatReflection.rotation.z=-0.31; scene.add(boatReflection);
     var boatShimmer=new THREE.Mesh(new THREE.CircleGeometry(3.2,24), new THREE.MeshBasicMaterial({ color:0xbfeef5, transparent:true, opacity:0.16, depthWrite:false }));
-    boatShimmer.rotation.x=-Math.PI/2; boatShimmer.position.set(-0.4,0.034,-6.6); boatShimmer.scale.set(1.6,0.6,1); boatShimmer.rotation.z=-0.31; scene.add(boatShimmer);
+    boatShimmer.rotation.x=-Math.PI/2; boatShimmer.position.set(-0.54,0.034,-8.14); boatShimmer.scale.set(1.6,0.6,1); boatShimmer.rotation.z=-0.31; scene.add(boatShimmer); // FIX v23: reflection + shimmer moved back with the boat (same delta as the berth)
     // FOUNDATION PASS: the boat's baked contact shadow now lives INSIDE
     // the boat group (built with the boat, below), so it moves and bobs
     // with the hull — the old static scene-level oval is gone.
@@ -5141,9 +5146,9 @@ var SceneFX = (function(){
       function fblob(x,z,r){
         geos.push(xformGeo(new THREE.CircleGeometry(r,10), x,0.048,z, -Math.PI/2,0,0, 1,0.75,1));
       }
-      for(var hi=0;hi<16;hi++){ // round the hull waterline (boat at (-1.1,-7.6), rotated 0.31)
+      for(var hi=0;hi<16;hi++){ // round the hull waterline (boat at (-1.24,-9.14), rotated 0.31 — FIX v23: moved back with the berth)
         var ha=hi/16*Math.PI*2, lx=Math.cos(ha)*4.35, lz=Math.sin(ha)*2.35;
-        fblob(-1.1+lx*Math.cos(0.31)+lz*Math.sin(0.31), -7.6-lx*Math.sin(0.31)+lz*Math.cos(0.31), 0.3+rnd(hi*257)*0.22);
+        fblob(-1.24+lx*Math.cos(0.31)+lz*Math.sin(0.31), -9.14-lx*Math.sin(0.31)+lz*Math.cos(0.31), 0.3+rnd(hi*257)*0.22);
       }
       [[-3.45,8.3],[3.45,8.3],[-3.45,12.4],[3.45,12.4],[-3.45,16.4],[3.45,16.4],[0,8.3]].forEach(function(pp,pi){
         for(var k2=0;k2<3;k2++){ var pa=rnd(pi*263+k2*7)*Math.PI*2; fblob(pp[0]+Math.cos(pa)*0.42, pp[1]+Math.sin(pa)*0.42, 0.16+rnd(k2*269+pi)*0.12); }
@@ -5282,7 +5287,22 @@ var SceneFX = (function(){
     });
 
     /* ----- shore, rocks, pines, bushes, grass, clouds ----- */
-    var grassTex=grassTexture(); grassTex.repeat.set(9,9);
+    /* FIX v23 (grass seam — Jenna, real play: "the grass has this hard
+       line between the main area and then the background area"): the
+       ground was THREE separate surfaces — a flat shore ring, a flat
+       far-ground ring, and two hill spheres poking up through them.
+       Each sphere cut through the flat rings at a steep angle, and
+       with different texture mapping + shading on each side, the
+       intersection read as a hard straight line across the far grass
+       (the ellipse where each hill surface crosses the flat ground).
+       The ground is now ONE continuous mesh (built below): a dense
+       ring whose vertices rise smoothly over the same two hill
+       ellipsoids, so there is no intersection edge at all — one
+       texture, one set of smooth normals. The hill spheres are gone;
+       the ground IS the hill. */
+    function hillSurfY(x,z,cz){ var q=1-(x/46)*(x/46)-((z-cz)/10)*((z-cz)/10); return q>0 ? -2.6+8.5*Math.sqrt(q) : null; }
+    function hillBump(x,z){ var b=0,h; h=hillSurfY(x,z,-30); if(h!==null&&h>-0.3) b=Math.max(b,h+0.3); h=hillSurfY(x,z,30); if(h!==null&&h>-0.3) b=Math.max(b,h+0.3); return b; }
+    var groundTex=grassTexture(); groundTex.repeat.set(34,34); // same ~7-unit grass tile as the old shore (9 tiles over its 64-unit diameter)
     /* WATER PASS 2: the shore is a RING (inner r=4.4), not a full disc.
        The water sheet dips to ~-1.0 in the funnel — BELOW the shore
        plane (-0.3) — so a full shore disc CAPPED the funnel with a
@@ -5291,8 +5311,11 @@ var SceneFX = (function(){
        holed, the funnel shows the water sheet itself + the pond bed
        below. RingGeometry UVs use the same planar mapping as
        CircleGeometry, so the grass look is unchanged. */
-    var shore=new THREE.Mesh(new THREE.RingGeometry(4.4,32,40), mat(0x6f9a58,{map:grassTex, roughness:1}));
-    shore.rotation.x=-Math.PI/2; shore.position.y=-0.3; shore.receiveShadow=true; scene.add(shore);
+    var groundGeo=new THREE.RingGeometry(4.4,120,128,64);
+    groundGeo.rotateX(-Math.PI/2);
+    (function(){ var gp=groundGeo.attributes.position; for(var gi=0;gi<gp.count;gi++){ gp.setY(gi, -0.3+hillBump(gp.getX(gi), gp.getZ(gi))); } groundGeo.computeVertexNormals(); })();
+    var ground=new THREE.Mesh(groundGeo, mat(0x6f9a58,{map:groundTex, roughness:1}));
+    ground.receiveShadow=true; scene.add(ground); // one continuous ground (shore + far ground + both hills): no seam, -3 draw calls
     var rimTex=grassTexture(); rimTex.repeat.set(14,14);
     var rim=new THREE.Mesh(new THREE.RingGeometry(17.5,19.6,56), mat(0x6f9a58,{map:rimTex, roughness:1})); // PHASE 3 grass unification: the rim washes the SHARED grass texture with the bank's own tint (was a tan 0xb59a67 that read as a different-coloured ring)
     rim.rotation.x=-Math.PI/2; rim.position.y=-0.02; scene.add(rim);
@@ -5402,30 +5425,35 @@ var SceneFX = (function(){
     });
     treeBuckets.forEach(function(b){ var tm=new THREE.Mesh(mergeGeos(b.geos), b.mat); tm.castShadow=false; scene.add(tm); });
     // FOUNDATION PASS: a low green hillside ridge behind the far bank —
-    // one squashed sphere, one draw call — so the top of the Angled
-    // frame reads as dense green hillside behind the tree line instead
-    // of flat blue sky showing through the gaps
-    var hill=new THREE.Mesh(new THREE.SphereGeometry(1,24,12), mat(0x6f9a58,{map:grassTex, roughness:1})); // PHASE 3 grass unification: hill tint = the bank's 0x6f9a58 (was 0x4d7a35, a different green)
-    hill.scale.set(46,8.5,10); hill.position.set(0,-2.6,-30); hill.castShadow=false; scene.add(hill); // CORRECTION (Jenna 17:19): the hill now wears the shared grass texture — as a flat untextured shell it was the "less rendered background" half of the cutoff
-    /* 360-DEGREE BACKGROUND (Jenna 2026-11-09): the south hill, mirror of
-       the north one — same sphere, same grass texture/tint, same scale —
-       so the background behind the pier reads as green hillside, not
-       flat sky. +1 draw call. */
-    var hillS=new THREE.Mesh(new THREE.SphereGeometry(1,24,12), mat(0x6f9a58,{map:grassTex, roughness:1}));
-    hillS.scale.set(46,8.5,10); hillS.position.set(0,-2.6,30); hillS.castShadow=false; scene.add(hillS);
+    // the ground mesh above rises over the hill ellipsoids, so the top
+    // of the Angled frame reads as dense green hillside behind the
+    // tree line instead of flat blue sky showing through the gaps.
+    // (FIX v23: no separate hill sphere any more — the ground IS the
+    // hill, so there is no seam where a sphere cut the flat ground.)
+    // FIX v23 (grass seam): the north hill sphere is gone — the ground
+    // mesh above now rises over the same ellipsoid, so the hillside
+    // behind the tree line is the ground itself, with no seam.
+    /* 360-DEGREE BACKGROUND (Jenna 2026-11-09): the south hillside is
+       part of the same ground mesh (see above) — the background
+       behind the pier reads as green hillside, not flat sky. */
+    // FIX v23 (grass seam): the south hill sphere is gone — same as the
+    // north one, the ground mesh now provides the hillside.
     /* CORRECTION (Jenna 17:19): blend the bank to the top edge — no flat
        bare background plane and no hard horizon cutoff.
-       (a) FAR GROUND: one big grass disc under everything, out past the
+       (a) FAR GROUND: the single ground mesh (above) runs out past the
        fog, so the terrain itself continues smoothly to the top edge of
-       the frame instead of ending at the shore circle's rim.
+       the frame instead of ending at the shore circle's rim. FIX v23:
+       it also rises over the hill ellipsoids, so there is no seam
+       where a hill sphere used to cut the flat ground.
        (b) HORIZON BORDER: a natural clustered border riding the hill
        ridge and the far shoreline — mixed pines, leafy trees, bushes,
        rocks and cattails. Everything is merged by material into a
        handful of static meshes (7 draw calls), bases sunk into the
        hill surface via the hill's own ellipsoid equation so nothing
        floats or clips. Static: no sway entries, no per-frame work. */
-    var farGround=new THREE.Mesh(new THREE.RingGeometry(4.4,120,40), mat(0x6f9a58,{map:grassTex, roughness:1})); // PHASE 3 grass unification: far ground tint = the bank's 0x6f9a58 (was 0x5d8a4a) // WATER PASS 2: centre holed like the shore (see above) so it can't cap the funnel either
-    farGround.rotation.x=-Math.PI/2; farGround.position.y=-0.55; farGround.castShadow=false; scene.add(farGround);
+    // FIX v23 (grass seam): the flat far-ground ring is gone — the
+    // ground mesh above already covers r 4.4–120, so the far grass is
+    // the same continuous surface as the shore, with no step at r=32.
     /* WATER PASS 2: the pond bed — one deep-blue disc at y=-1.15,
        below the funnel's lowest point (~-1.04), radius 4.8 (tucked
        past the ground holes' 4.4 edge). Anything seen past the water
@@ -5775,7 +5803,7 @@ var SceneFX = (function(){
     // then (-1.3, -9.9) at 0.31 rad, then (-1.1, -8.6) — hull above the
     // foam ring, lookAt shifted so bank + trees frame the top of the
     // screen. FOUNDATION PASS below moves it once more, to z=-7.6.)
-    var boat=new THREE.Group(); boat.position.set(-1.1,0.18,-7.6); boat.rotation.y=0.31; boatGroup=boat; // FOUNDATION PASS: berthed 1.0 unit further south toward the whirlpool, so the hull's inner edge sits right above the outer edge of the centre foam ring (foam outer r≈4.5, hull inner edge r≈4.1); whirlpool funnel (r≈3.2) stays fully clear and fully visible
+    var boat=new THREE.Group(); boat.position.set(-1.24,0.18,-9.14); boat.rotation.y=0.31; boatGroup=boat; // FIX v23 (symmetry — Jenna: both characters equidistant from the pond centre): berthed back from (-1.1,-7.6) so the boat character sits 8.95 from the centre, same as the pier character (was 7.40). Hull inner edge now r≈5.6 from the centre; whirlpool funnel (r≈3.2) stays fully clear and fully visible past the boat
     /* PHASE 3 boat warmth: the approved hexes stay EXACTLY as the color
        (0xA0522D / 0x8D5524) — what changes is the material RESPONSE: the
        same hex now also drives a wood-textured emissive term, so the
@@ -5965,7 +5993,7 @@ var SceneFX = (function(){
     // the same local spot in the boat — bench, tackle box, lantern pole
     // and rope coil in front of him, crates and canopy behind — seated
     // DOWN inside the hull walls (hips below the rail top).
-    oppA.position.set(-0.68,1.60,-7.37); oppA.rotation.y=0.31; oppA.scale.setScalar(1.86); scene.add(oppA); anglers.boat=oppA; // FOUNDATION PASS: same unscaled 1.86 size (he does NOT grow with the boat); his seat offset was re-derived for the 2.7x hull and the new berth — same local seat in the hull (between the benches, crates + canopy behind, tackle box + lantern pole in front), hips at the scaled bench height, and tick()'s bob base matches his new y
+    oppA.position.set(-0.822,1.60,-8.913); oppA.rotation.y=0.31; oppA.scale.setScalar(1.86); scene.add(oppA); anglers.boat=oppA; // FIX v23 (symmetry): moved back with the boat from (-0.68,-7.37) — now 8.95 from the pond centre, exactly the pier character's distance (was 7.40). Same unscaled 1.86 size; same local seat in the hull, hips at the scaled bench height, and tick()'s bob base matches his new y
     [youA,oppA].forEach(function(a){
       scene.add(a.userData.bobber); scene.add(a.userData.line);
       var fwd=new THREE.Vector3(Math.sin(a.rotation.y),0,Math.cos(a.rotation.y));
@@ -7769,7 +7797,7 @@ var SceneFX = (function(){
   return {
     frame:function(){ return frameCount; }, // FIX ROUND 2 (1a): rendered-frame counter for the pacing gates
     gameT:function(){ return gameT; }, // FIX ROUND 2 (1c): game-time clock (seconds at 60f/s)
-    setSeat:function(s){ seat=s; init(); resize(); },
+    setSeat:function(s){ seat=s; /* FIX v23 (a11y): the scene label must say where YOU are — "you in the boat" for seat 1, "you on the pier" for seat 0 — not "you on the pier" for both. */ if(window.els&&els.sceneWrap) els.sceneWrap.setAttribute("aria-label", s===1 ? "3D pond scene: you in the boat, your opponent on the pier, a whirlpool in the middle" : "3D pond scene: you on the pier, your opponent in a boat, a whirlpool in the middle"); init(); resize(); },
     setPreset:function(p){ preset=p; yaw=0; pitchOff=0; applyFrustum(); },
     setTurn:function(yours){
       if(!inited || failed) return;

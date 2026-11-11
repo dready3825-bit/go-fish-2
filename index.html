@@ -550,7 +550,16 @@
   #hudTop .hud-right{display:inline-flex;gap:5px;align-items:center;flex-wrap:nowrap;margin-left:auto}
   #hudTop .icon-btn{pointer-events:auto}
   #game #hudTop .chip,#game #hudTop .icon-btn{height:26px;padding:0 9px;font-size:12px;display:inline-flex;align-items:center;white-space:nowrap}
-  #game #hudTop .turn-banner{flex:1 1 auto;order:0;text-align:center;font-size:12.5px;padding:0 8px;height:26px;display:inline-flex;align-items:center;justify-content:center;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* v27 TOP-BAR OVERFLOW (390px): the live mode chip ("Live room UJEJAS ·
+     you host", with its letter-spaced code) is the widest item and had no
+     shrink path — it squeezed the turn pill to a sliver on the guest seat
+     and pushed Leave off the right edge on the host seat. The chip now
+     truncates with an ellipsis instead; pond / mute / Leave never shrink.
+     The turn pill is flex:1 0 auto — it grows to fill space but NEVER
+     shrinks, so "Your turn" / "Pier's turn" always reads in full and the
+     mode chip absorbs all of the squeeze (it is informational only). */
+  #game #hudTop #modeChip{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  #game #hudTop .turn-banner{flex:1 0 auto;order:0;text-align:center;font-size:12.5px;padding:0 8px;height:26px;display:inline-flex;align-items:center;justify-content:center;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #game .opp-chip{position:static;align-self:stretch;pointer-events:none;max-width:100%;width:100%;justify-content:flex-start;padding:4px 2px 1px;border-top:1px solid rgba(47,127,193,.35);border-radius:0;background:transparent;font-size:12px}
   #game .opp-avatar{width:20px;height:20px;font-size:11px}
   #game .opp-meta{font-size:12px;line-height:1.25}
@@ -559,6 +568,9 @@
   @media (max-width:640px){
     #game #hudTop .chip,#game #hudTop .icon-btn{padding:0 6px;font-size:11px;height:24px}
     #game #hudTop .turn-banner{font-size:11.5px;height:24px}
+    #game #hudTop #modeChip .code{letter-spacing:.1em} /* v27: the .25em code
+      spacing costs ~13px on a 6-letter code at phone width; tighter spacing
+      lets the mode chip show more of the room code before it ellipsizes. */
     #hudTop .hud-row,#hudTop .hud-right{gap:4px}
   }
   #hudBottom{
@@ -639,7 +651,7 @@
       <button class="btn btn-primary btn-block" id="soloBtn">🎣 Play vs the Computer</button>
       <button class="btn btn-block" id="installBtn" style="display:none">📲 How to install</button>
       <div id="liveNotice" role="status"></div>
-      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v26</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v27</div>
       <div class="divider">Play a friend live</div>
       <p style="font-size:13.5px;color:var(--ink-soft);margin:4px 2px 10px;line-height:1.55;text-align:left">Send your friend this app's link — https://dready3825-bit.github.io/go-fish-2/ — they can install it too. One of you taps <b>Create a room</b> and gets a short 6-letter code — tell your friend the code, they type it in below and tap <b>Join room</b>. That's it — no long codes to copy and paste.</p>
 
@@ -2245,6 +2257,31 @@ function modUseful(m,v){
     default: return false;
   }
 }
+/* GATING (v27): a modifier the server would REJECT gets no Play button —
+   the panel shows a short hint naming why instead, exactly like Mirror
+   Pond's "Nothing to copy yet". The server already refunds a failed play,
+   so this is UX only: it stops the tap, it never changes game logic.
+   Conditions mirror the engine guards (worker doModEffect + solo
+   applyModifier): reel needs an opponent pair; anchor / Life Ring / Fog
+   fail when already active; snatch / storm fail on an empty opponent hand;
+   double / swap / lucky fail on an empty pond; mirror fails with nothing
+   to copy. Blocked-by-shield and fog-vs-info plays are NOT gated — the
+   server accepts them (the mod is consumed, the shield is spent). */
+function modBlockedReason(m,v){
+  var you=v.you, opp=v.opponent;
+  if(!you) return null;
+  switch(m){
+    case "mirror": return v.oppLastMod ? null : "Nothing to copy yet — they haven't played a modifier.";
+    case "reel": return (opp && opp.pairs.length===0) ? "They have no pairs in their pile to steal." : null;
+    case "anchor": return you.shielded ? "Your Anchor is already down." : null;
+    case "shield": return you.ringShielded ? "Your Life Ring is already up." : null;
+    case "fog": return you.fogged ? "A Fog Bank is already hiding your hand." : null;
+    case "snatch": return (opp && opp.cardCount===0) ? "Their hand is empty — nothing to take." : null;
+    case "storm": return (opp && opp.cardCount===0) ? "Their hand is empty — nothing to scatter." : null;
+    case "double": case "swap": case "lucky": return v.pondCount===0 ? "The pond is empty." : null;
+    default: return null;
+  }
+}
 function privateIntelLine(v){
   /* YOUR intel results, in plain words for the yellow banner. This is built
      only from your own filtered view, so it never leaks to the opponent. */
@@ -2262,7 +2299,9 @@ function privateIntelLine(v){
   if(ev.kind==="shield") return "🛟 Life Ring result: your Life Ring is UP — the next Blind Snatch or Storm Surge aimed at you will fizzle.";
   if(ev.kind==="fog") return "🌫️ Fog Bank result: your hand is HIDDEN for "+possLow(oppName)+" turn — their Peek and Mate Sense will fizzle, and their asks are blind guesses.";
   if(ev.kind==="reel") return "🪝 Reel In result: that pair is YOURS now — check your pair pile. Their pile lost one, yours gained one.";
-  if(ev.kind==="goldie") return "🐠 Goldie's Gift result: read the message above — Goldie fetched your exact mate from the pond or right out of their hand, or told you it is already banked.";
+  /* Goldie: no private line — the event text already names the card, the
+     source (pond / their hand / already banked) and the pair, so a second
+     strip line saying "read the message above" is pure redundancy. */
   return "";
 }
 /* STALE-CELEBRATION SWEEP: the PAIR! pill and the confetti are
@@ -2513,8 +2552,15 @@ function render(){
   }
   else if(armed){
     var ai=MODIFIER_INFO[armed.mod];
-    els.handHint.textContent = ai.icon+" Armed — tap one of your fish cards"+(armed.mod==="magnet" ? " and the hook hunts its exact mate." : armed.mod==="goldie" ? " and Goldie hunts its exact mate — pond or their hand." : " to toss it back.");
-    els.handHint.className="hand-hint armed";
+    if(ai){
+      els.handHint.textContent = ai.icon+" Armed — tap one of your fish cards"+(armed.mod==="magnet" ? " and the hook hunts its exact mate." : armed.mod==="goldie" ? " and Goldie hunts its exact mate — pond or their hand." : " to toss it back.");
+      els.handHint.className="hand-hint armed";
+    } else {
+      /* SAFETY NET (v27 freeze fix): a poisoned armed state ({mod:null} or an unknown id) used to throw on ai.icon here and freeze every render — and, when the throw landed inside waitForStripThenCpu, it killed the CPU gate (thinking stuck true, bot step never scheduled). Clear the poisoned state and show the default hint instead of throwing. */
+      armed=null;
+      els.handHint.textContent="One action this turn: tap a fish card to ask · or tap a ★ Mod card to play it (a mod uses your turn).";
+      els.handHint.className="hand-hint";
+    }
   } else if(!v.yourTurn || v.phase!=="playing"){ els.handHint.textContent = v.phase==="finished" ? "Game over." : "Waiting for "+(opp?opp.name:"opponent")+"…"; els.handHint.className="hand-hint"; }
   else {
     var usefulNow=v.you.modifiers.filter(function(m){ return modUseful(m,v); });
@@ -2760,19 +2806,21 @@ function renderModPanel(v){
      has something to copy) and is answered by those alone; if a tap
      lands while an animation is still finishing, the click handler
      below waits out the lock briefly instead of refusing. */
-  var canPlay = v.yourTurn && v.phase==="playing" && !v.modUsedThisTurn && !(selectedMod==="mirror" && !v.oppLastMod);
+  var blockedReason = modBlockedReason(selectedMod, v);
+  var canPlay = v.yourTurn && v.phase==="playing" && !v.modUsedThisTurn && !blockedReason;
   els.modPanel.style.display="flex";
   els.modPanel.style.background=art.bg; els.modPanel.style.color=art.ink;
   els.modPanel.innerHTML = '<div class="mod-body">'+"<h3>"+inf.icon+" "+esc(inf.name)+'</h3><p>'+esc(blurb)+"</p></div>"
     + '<div class="row">'
     + (canPlay
         ? '<button class="btn btn-play" id="modPlayBtn">'+(needs ? "Arm it — then tap a fish card" : "Play")+"</button>"
-        : '<span style="font-size:13.5px;opacity:.9">'+(selectedMod==="mirror" && !v.oppLastMod ? "Nothing to copy yet — they haven't played a modifier." : v.modUsedThisTurn ? "One modifier per turn — you've used yours." : "You can only play this on your turn.")+"</span>")
+        : '<span style="font-size:13.5px;opacity:.9">'+(blockedReason || (v.modUsedThisTurn ? "One modifier per turn — you've used yours." : "You can only play this on your turn."))+"</span>")
     + '<button class="btn" id="modCancelBtn">Close</button></div>';
   var play=$("modPlayBtn"), cancel=$("modCancelBtn");
   if(play) play.addEventListener("click", function(){
     Sound.tap();
     var m=selectedMod, tries=0;
+    if(!m || !MODIFIER_INFO[m]) return; /* STALE PANEL FIX (v27 freeze root cause): the panel hides with display:none when the selection clears, but the old Play button stays in the DOM — a tap on it (script-driven, or a double-tap racing the hide) reads selectedMod as null and armed {mod:null}, which threw in render() and froze the UI. A null/unknown selection is never a real play: ignore the tap. */
     (function go(){
       if(selectedMod!==m) return; /* the panel moved on — this tap is stale */
       if((busy||thinking) && tries++<40){ setTimeout(go, 150); return; } /* an animation is finishing: wait it out (up to ~6s) rather than dropping the play */
@@ -3547,7 +3595,7 @@ var SceneFX = (function(){
        frame while her angler still clears the bottom cluster. Top /
        Low untouched; FOV and vo unchanged. */
     angled:{ base:[0,18.1,24.62], tgt:[0,-0.6,3.9], fov:63, vo:0.03 },
-    low:   { base:[0,4.32,22.7],  tgt:[0,0.0,2.0],  fov:57, vo:0.04, s1base:[0,14.0,30.0] } // FIX v23: seat-1 Low pulled back along its view axis (was (0,12.0,28.0) at SEAT1_PULL 1.20). (0,14,33) was tried first and is BROKEN — it drives the camera into a horizon-border tree due north at z≈-30.5 (solid green wall, verified by sweep: z=30 clear, z=31 blocked). (0,14,30) is the furthest safe point on this axis: ~9% further from the boat than v21, same Low tilt, verified clear. Do NOT move it further north without re-sweeping the tree line.
+    low:   { base:[0,4.97,25.8],  tgt:[0,0.0,2.0],  fov:57, vo:0.04, s1base:[0,14.0,30.0] } // FIX v27 (boat 94% of width in Low, whirlpool a low hidden band): Low base pulled back x1.15 along its view axis (offset from target [0,4.32,20.7] -> [0,4.97,23.8]) — same Low tilt and direction, boat shrinks toward ~82% and more pond/whirlpool shows. South trees (z=+30) sit behind this camera, which looks north, so the pull-back is clear. FOV and vo unchanged. s1base UNTOUCHED: (0,14,30) is the furthest safe point on its axis — (0,14,33) is BROKEN, it drives the camera into a horizon-border tree due north at z≈-30.5 (solid green wall, verified by sweep: z=30 clear, z=31 blocked). Do NOT move s1base further north without re-sweeping the tree line.
   };
   /* SEAT-1 PULL-BACK (Jenna 2026-11-09: from the boat side "that big ass
      boat" dominates the frame and the angle is awkward). For the
@@ -3571,7 +3619,7 @@ var SceneFX = (function(){
      (0,9,28) and (4,9,28) both caught a tree in the frame). Tilt
      ~25° below horizontal, still a low close view, pond visible
      over the boat on both sides. */
-  var SEAT1_PULL=1.40; // FIX v23 (Jenna: "player 2 in the boat is so big in comparison to the guy on the pier"): seat-1 pull-back raised from 1.20 so the boat takes up less of the frame and more pond + pier show. Seat 0 presets untouched.
+  var SEAT1_PULL=1.55; // FIX v27 (Jenna: "player 2 in the boat is so big in comparison to the guy on the pier" — still 79% vs 24% at 1.40): seat-1 pull-back raised from 1.40 so the near boat shrinks further toward the pier's on-screen size and more pond + pier show. Seat 0 presets untouched. A pure pull-back can only narrow the near/far ratio toward the boat's intrinsic ~1.8x size advantage, never fully equalize it — measured, not assumed (see v27-test-notes.md).
   var wrapAspect=1, wrapW=0, wrapHpx=0;
   function applyFrustum(){
     if(!camera) return;

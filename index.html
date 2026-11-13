@@ -253,7 +253,6 @@
   .hand-hint.armed{color:var(--accent-strong);font-weight:800}
   #handRow{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}
   .card-btn{background:none;border:none;padding:0;border-radius:10px;line-height:0}
-  .card-btn.bait-out{visibility:hidden} /* BAIT HAND SYNC: the Bait & Switch card is out on the line — its hand copy hides (layout untouched) so only the dangling copy exists */
   .card-btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
   .card-btn.targetable{animation:pulse 1s ease-in-out infinite}
   @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(245,165,36,0)}50%{box-shadow:0 0 0 4px rgba(245,165,36,.65)}}
@@ -312,6 +311,19 @@
   #luckyPanel h3{margin:0 0 4px;font-size:18px;font-family:Georgia,serif}
   #luckyPanel p{margin:0 0 10px;font-size:14px;line-height:1.45;opacity:.94}
   #luckyPanel .lucky-row{display:flex;gap:8px;flex-wrap:wrap}
+  /* ---------- Peek / Mate Sense result panels (v28: persistent until dismissed) ---------- */
+  #peekPanel,#sensePanel,#narrPanel{
+    display:none;margin-top:10px;border-radius:var(--radius);padding:12px 14px;color:#e6f6ff;
+    background:linear-gradient(160deg,#123f5e,#2e7d9e);box-shadow:var(--shadow);border:1px solid #0b2c42;
+  }
+  #sensePanel{background:linear-gradient(160deg,#6e1f3f,#ad3a68);border-color:#4d142c;color:#ffe9f3}
+  /* T1/T2 fix: long modifier/blocked narration panel — same persistent-until-dismissed pattern as Peek/Sense, warm amber so it reads as narration, not a result. */
+  #narrPanel{background:linear-gradient(160deg,#5e430c,#a5761f);border-color:#3d2c06;color:#fff3d6}
+  #peekPanel h3,#sensePanel h3,#narrPanel h3{margin:0 0 4px;font-size:18px;font-family:Georgia,serif}
+  #peekPanel p,#sensePanel p,#narrPanel p{margin:0 0 10px;font-size:14px;line-height:1.45;opacity:.94}
+  #peekPanel .peek-row,#sensePanel .sense-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  #peekPanel .peek-names,#sensePanel .sense-names{font-weight:700}
+  .pcard.sense-hit{box-shadow:0 0 0 3px #ff5da2,0 0 14px rgba(255,93,162,.75)} /* Mate Sense: your card whose mate was found stays highlighted */
   /* ---------- Log / finished / waiting ---------- */
   .log-panel{margin-top:10px;background:var(--panel);border:1px solid var(--panel-line);border-radius:var(--radius);padding:10px 12px}
   .log-panel h3{margin:0 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)}
@@ -651,7 +663,7 @@
       <button class="btn btn-primary btn-block" id="soloBtn">🎣 Play vs the Computer</button>
       <button class="btn btn-block" id="installBtn" style="display:none">📲 How to install</button>
       <div id="liveNotice" role="status"></div>
-      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v27</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v28</div>
       <div class="divider">Play a friend live</div>
       <p style="font-size:13.5px;color:var(--ink-soft);margin:4px 2px 10px;line-height:1.55;text-align:left">Send your friend this app's link — https://dready3825-bit.github.io/go-fish-2/ — they can install it too. One of you taps <b>Create a room</b> and gets a short 6-letter code — tell your friend the code, they type it in below and tap <b>Join room</b>. That's it — no long codes to copy and paste.</p>
 
@@ -735,7 +747,13 @@
           <div id="layRow" style="margin-top:10px;display:none">
             <button class="btn btn-primary" id="layBtn">Lay down your pair into your pile</button>
           </div>
+          <div id="endTurnRow" style="margin-top:10px;display:none">
+            <button class="btn btn-primary" id="endTurnBtn">End turn — don't spin the Whirlpool</button>
+          </div>
           <div id="luckyPanel"></div>
+          <div id="peekPanel"></div>
+          <div id="sensePanel"></div>
+          <div id="narrPanel"></div>
         </div>
       </div>
       <div id="confettiLayer" aria-hidden="true"></div>
@@ -975,11 +993,11 @@ var MODIFIER_INFO = {
   shield:{ name:"Life Ring", icon:"🛟", blurb:"Block the next Blind Snatch or Storm Surge aimed at you." },
   storm:{ name:"Storm Surge", icon:"⚡", blurb:"Send 2 random cards from your opponent's hand to the pond, and they draw 1 back." },
   reel:{ name:"Reel In", icon:"🪝", blurb:"Steal 1 whole pair from your opponent's pair pile." },
-  fog:{ name:"Fog Bank", icon:"🌫️", blurb:"Hide your hand next turn so your opponent can't Peek or Mate Sense you." },
-  bait:{ name:"Bait & Switch", icon:"🪤", blurb:"Force your opponent to ask you for a card you choose." },
+  fog:{ name:"Fog Bank", icon:"🌫️", blurb:"Fog rolls in and stays up: Peek and Mate Sense can't see your hand. The first Peek or Mate Sense aimed at you fizzles and the fog lifts." },
+  bait:{ name:"Bait & Switch", icon:"🪤", blurb:"Offer one card from your hand as bait — take a random card from their hand in exchange." },
   lucky:{ name:"Lucky Lure", icon:"🍀", blurb:"Draw 3 cards, keep 1 you choose, and return the other 2 to the pond." },
   mirror:{ name:"Mirror Pond", icon:"🪞", blurb:"Copy the last modifier your opponent played." },
-  whirl:{ name:"Whirlpool Spin", icon:"🌪️", blurb:"Skip your opponent's next turn and take another turn yourself." },
+  whirl:{ name:"Whirlpool Spin", icon:"🌪️", blurb:"A free action — it never uses your turn. Play it before or after your card: they lose their next turn and you go again." },
   goldie:{ name:"Goldie's Gift", icon:"🐠", blurb:"Pick 1 of your cards — Goldie fetches its exact mate from the pond, or snatches it out of your opponent's hand." }
 };
 var MODIFIER_ART = {
@@ -1006,8 +1024,8 @@ var MOD_NEEDS_TARGET = { swap:"card", magnet:"card", bait:"card", goldie:"card" 
 /* ---------------- Engine (Go Fish, 86-card deck) ---------------- */
 function shuffle(a){ a=a.slice(); for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
 function isModCard(c){ return "mod" in c; }
-function emptyPlayer(){ return { hand:[], pairs:[], modifiers:[], peeked:[], shielded:false, ringShielded:false, sonar:null, sense:null, scoped:null, fogged:false, frozen:false }; }
-function emptyState(){ return { deck:[], players:[emptyPlayer(),emptyPlayer()], turn:0, phase:"playing", winner:null, modUsedThisTurn:false, log:[], lastEvent:null, eventSeq:0, rematch:[false,false], endReason:null, baitTrap:null, lastMod:[null,null], lastOverflow:null, overflows:[], dealing:false, pendingLucky:null }; }
+function emptyPlayer(){ return { hand:[], pairs:[], modifiers:[], peeked:[], shielded:false, ringShielded:false, sonar:null, sense:null, scoped:null, fogged:false, frozen:false, skipTurn:false }; }
+function emptyState(){ return { deck:[], players:[emptyPlayer(),emptyPlayer()], turn:0, phase:"playing", winner:null, modUsedThisTurn:false, whirlUsedThisTurn:false, whirlWindow:false, log:[], lastEvent:null, eventSeq:0, rematch:[false,false], endReason:null, lastMod:[null,null], lastOverflow:null, overflows:[], dealing:false, pendingLucky:null }; }
 function pushLog(st,text,actor){ st.log.push({text:text,actor:actor}); if(st.log.length>40) st.log.splice(0, st.log.length-40); }
 function setEvent(st,ev){ st.eventSeq+=1; ev.seq=st.eventSeq; st.lastEvent=ev; }
 function fishDeck(){ var cs=[]; for(var r=0;r<RANKS.length;r++) for(var s=0;s<SUITS.length;s++) cs.push({ id:RANKS[r]+SUITS[s], rank:RANKS[r], suit:SUITS[s] }); return cs; }
@@ -1051,21 +1069,44 @@ function enforceModLimit(st,who){
     st.overflows.push({ who:who, mod:old });
   }
 }
-function drawCards(st,who,n){
+function drawCards(st,who,n,opts){
+  opts = opts || {};
   var p=st.players[who], cards=[], mods=[];
   for(var i=0;i<n && st.deck.length>0;i++){
     var card;
-    /* MOD FLOW (Jenna 09:34): she went round after round with no mod
-       in hand. A player holding NO modifiers now draws a modifier
-       from the pond first (while any remain in it): the opening deal
-       always includes a mod, and the first draw after playing your
-       last mod brings one back — nobody sits mod-less for rounds.
-       The 3-mod hand limit (enforceModLimit) is untouched. */
-    if(p.modifiers.length===0 && mods.length===0){
+    /* MOD FLOW — DRIFT FIX (N4): mod-first is OPT-IN, matching the
+       worker (engine.js drawCards only goes mod-first when
+       opts.modFirst is passed, which happens only via ensureMod).
+       The old unconditional rule made every solo draw mod-first while
+       live draws were top-of-deck. The "always a mod in hand"
+       guarantee still runs through topUpMod, which passes
+       {modFirst:true}; every other draw is top-of-deck, like live.
+       Scan direction also matches the worker: from the deck end
+       (the top of the pond) inward. */
+    if(opts.modFirst && p.modifiers.length===0){
       var mi=-1;
-      for(var k=0;k<st.deck.length;k++){ if(isModCard(st.deck[k])){ mi=k; break; } }
+      for(var k=st.deck.length-1;k>=0;k--){ if(isModCard(st.deck[k])){ mi=k; break; } }
       card = mi>=0 ? st.deck.splice(mi,1)[0] : st.deck.pop();
     } else card=st.deck.pop();
+    if(isModCard(card) && card.mod==="shield" && p.ringShielded){
+      /* LIFE RING DUPLICATE (v28): a Life Ring is already up for this
+         player — drawing another from the pond is never a wasted
+         duplicate. The player draws the next fish card from the pond
+         instead, and the ring goes back into the pond. If the pond
+         holds no fish card at all, the player keeps the ring — but
+         the ring must NOT also stay in the pond (that duplicated it:
+         the same ring counted in both the deck and the hand, and the
+         modifiers array grew unboundedly in late-game random games). */
+      var fi=-1;
+      for(var k=st.deck.length-1;k>=0;k--){ if(!isModCard(st.deck[k])){ fi=k; break; } }
+      if(fi>=0){
+        var fish=st.deck.splice(fi,1)[0];
+        st.deck.splice(Math.floor(Math.random()*(st.deck.length+1)), 0, card); // ring back into the pond at a random spot
+        p.hand.push(fish); cards.push(fish); pushLog(st,"Life Ring already up — the pond dealt a fish card instead of a second ring.",who);
+      }
+      else { p.modifiers.push(card.mod); mods.push(card.mod); enforceModLimit(st,who); } /* pond holds no fish card at all: keep the ring rather than lose the draw */
+      continue;
+    }
     if(isModCard(card)){ p.modifiers.push(card.mod); mods.push(card.mod); enforceModLimit(st,who); } else { p.hand.push(card); cards.push(card); }
   }
   return { cards:cards, mods:mods };
@@ -1086,11 +1127,34 @@ function overflowNote(st,names){
   return " "+notes.join(" ");
 }
 function passTurn(st,who){
-  /* One action per turn. Ending your turn: the turn passes, and the
-     incoming player's Fog Bank (which protected them through the turn
-     just played) lifts. */
-  st.turn=1-who; st.modUsedThisTurn=false;
-  st.players[st.turn].fogged=false;
+  /* One action per turn. Ending your turn: the turn passes.
+     FOG BANK (v28) is a persistent shield now: it stays up until a Peek
+     or Mate Sense fizzles on it — it does NOT lift on the turn pass.
+     WHIRLPOOL SPIN (v28): the free-action flag resets only when a NEW
+     player's turn starts. When the turn returns to the SAME player
+     (skipTurn), it is still their turn, so whirlUsedThisTurn stays. */
+  var to=1-who;
+  if(st.players[to].skipTurn){
+    st.players[to].skipTurn=false;
+    st.turn=who; st.modUsedThisTurn=false; st.whirlWindow=false;
+    /* MOD FLOW (Jenna 09:34): the player going again tops up too. */
+    if(topUpMod(st, who)){
+      pushLog(st, "The pond deals a modifier to the player who held none.", "sys");
+    }
+    ensureHand(st, who);
+    return;
+  }
+  /* DRIFT FIX (N5): incoming player has nothing to do (no cards, no
+     mods, empty pond) — they get no turn. The player who just acted
+     keeps it and may lay a pair or play a mod; if they cannot act
+     either, checkEnd finishes it. Matches the worker (engine.js
+     passTurn). The flag stays as it is: it is still their turn. */
+  if(st.players[to].hand.length===0 && st.players[to].modifiers.length===0 && st.deck.length===0){
+    st.turn=who; st.modUsedThisTurn=false; st.whirlWindow=false;
+    ensureHand(st, who);
+    return;
+  }
+  st.turn=to; st.modUsedThisTurn=false; st.whirlUsedThisTurn=false; st.whirlWindow=false;
   /* MOD FLOW (Jenna 09:34): the incoming player tops up — holding no
      modifiers at the start of your turn, the pond deals you one
      (while any remain in the pond). See topUpMod. */
@@ -1098,6 +1162,26 @@ function passTurn(st,who){
     pushLog(st, "The pond deals a modifier to the player who held none.", "sys");
   }
   ensureHand(st, st.turn);
+}
+/* WHIRLPOOL WINDOW (v28): after your main action, if you hold a
+   Whirlpool Spin you haven't used this turn, the turn does NOT pass yet —
+   you may spin it (free) and go again, or end the turn. Returns true
+   when the window opens (the caller must NOT passTurn). */
+function maybeWhirlWindow(st,who){
+  if(st.phase!=="playing") return false;
+  if(st.whirlUsedThisTurn || st.whirlWindow) return false;
+  if(st.players[who].modifiers.indexOf("whirl")===-1) return false;
+  if(st.pendingLucky && st.pendingLucky.who===who) return false;
+  st.whirlWindow=true; st.modUsedThisTurn=true; /* block other mods; Whirlpool alone may still be played */
+  return true;
+}
+/* End the turn from the Whirlpool window (the player declines to spin). */
+function endTurn(st,who){
+  if(st.phase!=="playing") return { ok:false, error:"The game is over." };
+  if(st.turn!==who) return { ok:false, error:"It's not your turn." };
+  if(!st.whirlWindow) return { ok:false, error:"Nothing to end — take your turn." };
+  st.whirlWindow=false;
+  passTurn(st,who); checkEnd(st); return { ok:true };
 }
 function drawTotal(r){ return r.cards.length + r.mods.length; }
 /* MOD FLOW — the "always a mod in hand" guarantee (OVERHAUL): if `who`
@@ -1112,7 +1196,36 @@ function drawTotal(r){ return r.cards.length + r.mods.length; }
 function topUpMod(st,who){
   if(st.players[who].modifiers.length>0) return false;
   if(!st.deck.some(function(c){ return isModCard(c); })) return false;
-  drawCards(st,who,1);
+  var r=drawCards(st,who,1,{modFirst:true});
+  /* STRANDED-PAIR FIX: the draw above can deliver a FISH, not a mod —
+     the Life Ring duplicate rule swaps a shield for the next fish in the
+     pond — and that fish can complete a pair in hand. Bank it at once:
+     without this the pair sits stranded, checkEnd refuses to finish
+     while a pair is held, and the CPU never lays pairs down, so the game
+     can stall forever with turns passing and no way to progress.
+     The bank can also COMPLETE the game (26th pair), and several
+     callers never end-check after the top-up (applyModifier's
+     pair-retain path, botStep's direct top-up), so end-check here, at
+     the single choke point, instead of relying on every caller. */
+  var topUpPairs=extractPairs(st,who); checkEnd(st);
+  if(topUpPairs.length>0){
+    /* TOP-UP NARRATION: a pair banked by the refill was banked silently —
+       the pile count jumped with no line naming it. Name the drawn card
+       (when known) and the pair in the event text and the move log, and
+       stamp the pairs on the event so the client and the pair-trace
+       tooling can attribute them to this top-up (the pair can belong to
+       the incoming player while lastEvent still names the other player's
+       action). Wording stays neutral about who drew — this function has
+       no player names — the stamp carries the seat. */
+    var drewFace=r.cards.length>0 ? r.cards[0].rank+" of "+SUIT_NAME[r.cards[0].suit] : null;
+    var topUpLabels=topUpPairs.map(pairLabel).join(", ");
+    var topUpClause=drewFace ? " And on the refill, the "+drewFace+" banked the "+topUpLabels+"!" : " The refill banked the "+topUpLabels+"!";
+    if(st.lastEvent){
+      st.lastEvent.topUpPairs=(st.lastEvent.topUpPairs||[]).concat(topUpPairs.map(function(pid){ return { pairId:pid, rank:pairRankFromId(pid), color:pairColorFromId(pid), who:who }; }));
+      if(st.lastEvent.text) st.lastEvent.text+=topUpClause;
+    }
+    pushLog(st, drewFace ? "The refill banked the "+topUpLabels+" — the "+drewFace+" completed the pair." : "The refill banked the "+topUpLabels+".", who);
+  }
   return st.players[who].modifiers.length>0;
 }
 function ensureHand(st,who){ var g=0; while(st.players[who].hand.length===0 && st.deck.length>0 && g++<80) drawCards(st,who,1); }
@@ -1130,7 +1243,10 @@ function checkEnd(st){
   if(cross) return false;
   var emptySeat = h0.length===0 ? 0 : (h1.length===0 ? 1 : null);
   if(emptySeat!==null){
-    var BREAKERS=["snatch","storm","reel"], em=st.players[emptySeat];
+    /* DRIFT FIX (N5): Storm is NOT a breaker — it ponds opponent cards
+       and the opponent draws 1 back, so it returns no card to the
+       empty-hand player. Matches the worker (engine.js checkEnd). */
+    var BREAKERS=["snatch","reel"], em=st.players[emptySeat];
     if(em.modifiers.some(function(m){ return BREAKERS.indexOf(m)>=0; })) return false;
     return finish("The pond is empty and one hand is out of cards — no pair can still be made.");
   }
@@ -1140,7 +1256,7 @@ function dealGame(st,names){
   var fresh=emptyState();
   fresh.deck=buildDeck();
   fresh.dealing=true;
-  for(var i=0;i<7;i++){ drawCards(fresh,0,1); drawCards(fresh,1,1); }
+  for(var i=0;i<7;i++){ drawCards(fresh,0,1,{modFirst:true}); drawCards(fresh,1,1,{modFirst:true}); }
   fresh.dealing=false;
   /* HAND LIMIT AT THE DEAL (FROM-SCRATCH REVIEW): the 3-mod limit holds
      for opening hands too. An excess dealt mod swaps straight back into
@@ -1185,7 +1301,7 @@ function dealGame(st,names){
      the intro is ~35% shorter so the one-bar strip sits a line
      lower at rest. The full rules stay in the How-to panel and the
      log keeps its own complete deal entry. */
-  setEvent(fresh,{ kind:"start", actor:fresh.turn, text:"Deck shuffled — 7 cards each, a mod in every opening hand."+note+" Coin flip: "+names[fresh.turn]+" "+vrb(names[fresh.turn],"go","goes")+" first. Tap a fish card to ask for its exact mate!" });
+  setEvent(fresh,{ kind:"start", actor:fresh.turn, text:"Deck shuffled (7 cards each) — Coin flip: "+names[fresh.turn]+" "+vrb(names[fresh.turn],"go","goes")+" first!" });
   Object.keys(fresh).forEach(function(k){ st[k]=fresh[k]; });
 }
 function clearIntel(st,actor){
@@ -1196,6 +1312,9 @@ function applyAsk(st,who,card,names){
   if(st.phase!=="playing") return { ok:false, error:"The game is over." };
   if(st.turn!==who) return { ok:false, error:"It's not your turn." };
   if(st.pendingLucky) return { ok:false, error:"Choose your Lucky Lure card first — tap 1 of the hauled cards to keep it." };
+  /* WHIRLPOOL WINDOW (v28): while the window is open the only move is
+     the free Whirlpool Spin (or ending the turn) — no free ask. */
+  if(st.whirlWindow) return { ok:false, error:"Whirlpool Spin is on the table — spin it for another turn, or end your turn." };
   st.lastOverflow=null;
   clearIntel(st,who);
   var me=st.players[who], opp=st.players[1-who];
@@ -1205,17 +1324,12 @@ function applyAsk(st,who,card,names){
   var wantId = card ? (typeof card==="string" ? card : card.id) : null;
   var mine = wantId ? me.hand.find(function(c){ return c.id===wantId; }) : null;
   if(!mine) return { ok:false, error:"Tap one of your own fish cards to ask for its exact mate." };
-  /* BAIT & SWITCH ENFORCEMENT: while a trap is rigged against the asker,
-     the ONLY ask allowed is the rigged one — any other card is refused
-     outright (before this, the rig was ignored and any ask went through).
-     Asking the rigged card spends the trap: the ask then resolves exactly
-     as the sprung trap would (take it and ask again, or Go Fish). The
-     automatic spring (resolveBaitTrap) is the usual path; this guard is
-     what makes the rig binding no matter how the ask arrives. */
-  if(st.baitTrap && st.baitTrap.forPlayer===who){
-    if(mateIdOf(mine)!==st.baitTrap.mateId) return { ok:false, error:"Bait & Switch! Your ask is rigged — you must ask for the "+labelForMateId(st.baitTrap.mateId)+" first. That's your turn." };
-    st.baitTrap=null;
-  }
+  /* READINESS (Nov 12, 2026): the CPU remembers the human's asks — a
+     card the human asked for is a card the human holds. If the bot
+     later holds its mate, botStep's known-mate check can fire Magnet
+     Hook on it. Hits self-expire (the pair leaves the hand); botStep
+     re-validates that the human still holds the card. */
+  if(who===0){ if(!st.humanAsks) st.humanAsks=[]; st.humanAsks.push(mine.id); if(st.humanAsks.length>12) st.humanAsks.splice(0, st.humanAsks.length-12); }
   var rank=mine.rank, mate=mateCardOf(mine), mateLbl=askTargetLabel(mine), phrase=askPhrase(mine);
   var name=names[who], oppName=names[1-who];
   var takenCard=opp.hand.find(function(c){ return c.id===mate.id; });
@@ -1252,7 +1366,11 @@ function applyAsk(st,who,card,names){
     setEvent(st,{ kind:"ask_miss", actor:who, rank:rank, color:colorOf(mine.suit), askText:phrase, mateId:mate.id, drawnCardId:drawnCard?drawnCard.id:undefined, text:name+" asked for the "+mateLbl+" — "+oppName+" "+vrb(oppName,"don't","doesn't")+" have that exact card. \"Go Fish!\" "+name+" "+vrb(name,"cast","casts")+" the pole into the whirlpool and "+vrb(name,"draw","draws")+" 1." });
   }
   if(!wished && paired2.length===0){
-    passTurn(st,who);
+    /* WHIRLPOOL WINDOW (v28): a missed ask would pass the turn — but if
+       the asker holds a Whirlpool Spin they haven't used this turn, the
+       turn holds instead: they may spin it (free) and go again, or end
+       the turn. Without a Whirlpool the turn passes as before. */
+    if(!maybeWhirlWindow(st,who)) passTurn(st,who);
   } else { ensureHand(st,who);
     /* Earned another action (pair / fished mate): the mod guarantee
        covers this action too — top up before they act again. */
@@ -1295,7 +1413,11 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
   if(st.phase!=="playing") return { ok:false, error:"The game is over." };
   if(st.turn!==who) return { ok:false, error:"Modifiers can only be played on your turn." };
   if(st.pendingLucky) return { ok:false, error:"Choose your Lucky Lure card first — tap 1 of the hauled cards to keep it." };
-  if(st.modUsedThisTurn) return { ok:false, error:"One modifier per turn — you've used yours." };
+  /* WHIRLPOOL FREE ACTION (v28): Whirlpool Spin never consumes the turn's
+     modifier slot. It may be played even after the turn's modifier was
+     used — but only from the Whirlpool window (after a main action), when
+     it is the free spin. Any other modifier still needs a fresh slot. */
+  if(st.modUsedThisTurn && !(mod==="whirl" && st.whirlWindow)) return { ok:false, error:"One modifier per turn — you've used yours." };
   var me=st.players[who], opp=st.players[1-who];
   var idx=me.modifiers.indexOf(mod);
   if(idx===-1) return { ok:false, error:"You don't hold that modifier." };
@@ -1306,7 +1428,18 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
     effMod=st.lastMod[1-who];
     if(!effMod) return { ok:false, error:oppName+" "+vrb(oppName,"haven't","hasn't")+" played a modifier yet — Mirror Pond has nothing to copy." };
   }
-  if((effMod==="peek"||effMod==="sense") && opp.fogged) return { ok:false, error:oppName+" "+vrb(oppName,"are","is")+" hidden by Fog Bank — "+MODIFIER_INFO[effMod].name+" can't see through fog." };
+  /* ONE FREE SPIN PER TURN: a second Whirlpool in the same turn is
+     rejected outright — including one reached by a Mirror Pond copy
+     (effMod is already resolved above). The flag resets only when a
+     NEW player's turn starts (see passTurn). */
+  if(effMod==="whirl" && st.whirlUsedThisTurn){
+    /* DRIFT FIX (N1, worker parity): the worker records the copied mod
+       inside its recursive doModEffect BEFORE the whirl switch-guard
+       rejects it, so a failed Mirror-copy of Whirlpool still leaves
+       "whirl" as the actor's last played mod. Match that here. */
+    if(mod==="mirror") st.lastMod[who]=effMod;
+    return { ok:false, error:"You've already spun the Whirlpool this turn — one free spin per turn." };
+  }
   if(effMod==="snatch" && opp.hand.length===0) return { ok:false, error:poss(oppName)+" hand is empty — nothing to take." };
   if(effMod==="swap" && me.hand.length===0) return { ok:false, error:"Your hand is empty — nothing to swap." };
   if(effMod==="swap" && !discardCardId) return { ok:false, error:"Pick a card from your hand to toss back first." };
@@ -1324,8 +1457,9 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
   if(effMod==="reel" && opp.pairs.length===0) return { ok:false, error:oppName+" "+vrb(oppName,"have","has")+" no pairs in "+proTheir(oppName)+" pile yet — nothing to reel in." };
   if(effMod==="fog" && me.fogged) return { ok:false, error:"Your hand is already hidden by fog." };
   if(effMod==="bait" && me.hand.length===0) return { ok:false, error:"Your hand is empty — no card to bait with." };
-  if(effMod==="bait" && !discardCardId) return { ok:false, error:"Pick one of your fish cards to set the bait with first." };
+  if(effMod==="bait" && !discardCardId) return { ok:false, error:"Pick one of your fish cards to offer as bait first." };
   if(effMod==="bait" && !me.hand.some(function(c){ return c.id===discardCardId; })) return { ok:false, error:"That card isn't in your hand." };
+  if(effMod==="bait" && opp.hand.length===0) return { ok:false, error:poss(oppName)+" hand is empty — nothing to take in exchange." };
   if(effMod==="goldie" && me.hand.length===0) return { ok:false, error:"Your hand is empty — Goldie has no mate to hunt." };
   if(effMod==="goldie" && !discardCardId) return { ok:false, error:"Pick one of your fish cards for Goldie to find the mate of first." };
   if(effMod==="goldie" && !me.hand.some(function(c){ return c.id===discardCardId; })) return { ok:false, error:"That card isn't in your hand." };
@@ -1334,7 +1468,6 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
   clearIntel(st,who);
   me.modifiers.splice(idx,1);
   st.modUsedThisTurn=true;
-  if(mod!=="mirror") st.lastMod[who]=mod;
 
   var blockedBy=shieldThatBlocks(effMod,opp);
   if(blockedBy){
@@ -1343,12 +1476,49 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
     var blockedText="Blocked! "+poss(name)+" "+MODIFIER_INFO[effMod].name+" shattered on "+possLow(oppName)+" "+shieldName+".";
     pushLog(st, blockedText,"sys");
     setEvent(st,{ kind:"blocked", actor:who, text:blockedText, blockedBy:blockedBy }); /* OVERHAUL VERIFY: blockedBy rides the event so the scene can show the shield that ACTUALLY blocked (anchor vs life ring) instead of always bouncing a life ring */
+    /* DRIFT FIX (N1): a Mirror Pond copy that fizzles on a shield is
+       still recorded as the copied mod — the worker's mirror case
+       records the copy whenever the recursive call returns ok. A
+       direct blocked mod is NOT recorded (N2, below). */
+    if(mod==="mirror") st.lastMod[who]=effMod;
     ensureHand(st,who); checkEnd(st);
-    if(st.phase==="playing") passTurn(st,who);
+    /* DRIFT FIX (N3): a blocked mod opens the Whirlpool window, like
+       the worker's applyModifier tail — it does not pass the turn
+       outright. A player holding an unused Whirlpool keeps the spin. */
+    if(st.phase==="playing" && !maybeWhirlWindow(st,who)) passTurn(st,who);
     var oNoteBlk=overflowNote(st,names);
     if(oNoteBlk && st.lastEvent) st.lastEvent.text+=oNoteBlk;
     return { ok:true };
   }
+
+  /* FOG BANK (v28): a Peek or Mate Sense played into fog is SPENT and
+     fizzles — it learns nothing, and the fog is consumed (falls off).
+     This is the shield working as designed, not a rejected play: the
+     opponent USES their Peek/Mate Sense and it serves the fog's purpose. */
+  if((effMod==="peek"||effMod==="sense") && opp.fogged){
+    opp.fogged=false;
+    var fogText="Fog Bank! "+poss(name)+" "+MODIFIER_INFO[effMod].name+" vanished into "+possLow(oppName)+" fog — it fizzled, and the fog lifted.";
+    pushLog(st, fogText,"sys");
+    setEvent(st,{ kind:"blocked", actor:who, text:fogText, blockedBy:"fog" });
+    /* DRIFT FIX (N1): same as the shield block above — a Mirror Pond
+       copy that fizzles on fog is still recorded as the copied mod. */
+    if(mod==="mirror") st.lastMod[who]=effMod;
+    ensureHand(st,who); checkEnd(st);
+    /* DRIFT FIX (N3): a fog-fizzled mod opens the Whirlpool window,
+       like the worker — it does not pass the turn outright. */
+    if(st.phase==="playing" && !maybeWhirlWindow(st,who)) passTurn(st,who);
+    var oNoteFog=overflowNote(st,names);
+    if(oNoteFog && st.lastEvent) st.lastEvent.text+=oNoteFog;
+    return { ok:true };
+  }
+
+  /* DRIFT FIX (N1/N2): record the played mod only AFTER the blocked
+     and fog checks above — a fizzled mod is never "last played"
+     (worker parity: engine.js records lastModBy only after those
+     checks). A Mirror Pond records the mod it COPIED, never "mirror"
+     itself — the worker's mirror case sets lastModBy to the copied
+     mod on success. */
+  st.lastMod[who]=(mod==="mirror") ? effMod : mod;
 
   function pairFields(paired){ return paired && paired.length ? { pairRank:pairRankFromId(paired[0]), pairId:paired[0] } : {}; }
   function evBase(kind,extra){ var e={ kind:kind, actor:who }; Object.keys(extra||{}).forEach(function(k){ e[k]=extra[k]; }); return e; }
@@ -1358,6 +1528,7 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
      pair from asking or fishing. The OPPONENT's pairs growing (Storm
      Surge scattering into a pair, Chum's free draw) does not count. */
   var pairsBefore=me.pairs.length;
+  var whirlPass=false; /* set by the Whirlpool case when spun from the window */
 
   switch(effMod){
     case "snatch": {
@@ -1371,8 +1542,10 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
       var i2=me.hand.findIndex(function(c){ return c.id===discardCardId; }); var tossed=me.hand.splice(i2,1)[0];
       st.deck=shuffle(st.deck.concat([tossed]));
       var haul2=drawCards(st,who,1); var pr2=extractPairs(st,who); sortHand(me);
-      pushLog(st, name+" swapped bait — tossed a "+tossed.rank+" and drew fresh.","sys");
-      var e2=evBase("swap",{ drawnCardId:haul2.cards[0]?haul2.cards[0].id:undefined, drewMod:haul2.mods[0], text:"Swap Bait! "+name+" tossed a card and drew a fresh one." });
+      var tossedFace=tossed.rank+SUIT_GLYPH[tossed.suit];
+      var drewFace=haul2.cards[0] ? haul2.cards[0].rank+SUIT_GLYPH[haul2.cards[0].suit] : (haul2.mods[0] ? "the "+MODIFIER_INFO[haul2.mods[0]].name+" modifier" : "nothing");
+      pushLog(st, name+" swapped bait — tossed the "+tossedFace+" and drew "+drewFace+".","sys");
+      var e2=evBase("swap",{ drawnCardId:haul2.cards[0]?haul2.cards[0].id:undefined, drewMod:haul2.mods[0], tossedId:tossed.id, text:"Swap Bait! "+name+" tossed the "+tossedFace+" back into the pond and drew "+drewFace+(pr2.length?" — paired the "+pairLabel(pr2[0])+"!":".") });
       Object.assign(e2,pairFields(pr2)); setEvent(st,e2); break;
     }
     case "peek": {
@@ -1416,12 +1589,16 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
     }
     case "storm": {
       var lostN=Math.min(2,opp.hand.length);
-      for(var i8=0;i8<lostN;i8++){ var j8=Math.floor(Math.random()*opp.hand.length); st.deck.push(opp.hand.splice(j8,1)[0]); }
+      var lostCards=[];
+      for(var i8=0;i8<lostN;i8++){ var j8=Math.floor(Math.random()*opp.hand.length); lostCards.push(opp.hand.splice(j8,1)[0]); }
+      lostCards.forEach(function(c){ st.deck.push(c); });
       st.deck=shuffle(st.deck);
       var back=drawCards(st,(1-who),1); var backTotal=drawTotal(back);
       var oppPaired=extractPairs(st,(1-who)); sortHand(opp);
-      pushLog(st, "Storm Surge scattered "+lostN+" cards from "+possLow(oppName)+" hand into the pond — they fished "+backTotal+" back!","sys");
-      var e8=evBase("storm",{ count:lostN, text:"Storm Surge! Lightning scattered "+lostN+" of "+possLow(oppName)+" cards into the pond — they fished "+backTotal+" back"+(oppPaired.length?" and paired the "+pairLabel(oppPaired[0]):"")+(oppPaired.length?"!":".") });
+      var lostFaces=lostCards.map(function(c){ return c.rank+SUIT_GLYPH[c.suit]; }).join(" and ");
+      var gainedFace=back.cards[0] ? back.cards[0].rank+SUIT_GLYPH[back.cards[0].suit] : (back.mods[0] ? "the "+MODIFIER_INFO[back.mods[0]].name+" modifier" : "nothing");
+      pushLog(st, "Storm Surge scattered "+lostFaces+" from "+possLow(oppName)+" hand into the pond — they fished back "+gainedFace+"!","sys");
+      var e8=evBase("storm",{ count:lostN, lostIds:lostCards.map(function(c){ return c.id; }), gainedId:back.cards[0]?back.cards[0].id:undefined, gainedMod:back.mods[0], text:"Storm Surge! Lightning scattered "+lostFaces+" from "+possLow(oppName)+" hand into the pond — they fished back "+gainedFace+(oppPaired.length?" and paired the "+pairLabel(oppPaired[0]):"")+(oppPaired.length?"!":".") });
       Object.assign(e8,pairFields(oppPaired)); if(oppPaired.length) e8.pairOwner=1-who; /* ATTRIBUTION FIX: this pair was banked by the stormed player (the opponent of the actor) from their redraw — never credit it to the actor in the view, the strip, or the pair celebration. */ setEvent(st,e8); break;
     }
     case "monster": {
@@ -1448,13 +1625,28 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
     case "fog": {
       me.fogged=true;
       pushLog(st, name+" called down a Fog Bank — their hand is hidden.","sys");
-      setEvent(st, evBase("fog",{ text:"Fog Bank! "+poss(name)+" hand vanishes into fog for "+possLow(oppName)+" next turn — no Peek and no Mate Sense can see through it. Asks against "+name+" are blind guesses." })); break;
+      setEvent(st, evBase("fog",{ text:"Fog Bank! "+poss(name)+" hand vanishes into fog — it stays up until a Peek or Mate Sense fizzles on it. Peek and Mate Sense can't see through it." })); break;
     }
     case "bait": {
-      var mineT=me.hand.find(function(c){ return c.id===discardCardId; });
-      st.baitTrap={ forPlayer:1-who, by:who, mateId:mateIdOf(mineT), label:askTargetLabel(mineT) };
-      pushLog(st, name+" set Bait & Switch — "+oppName+" will be forced to ask for the "+askTargetLabel(mineT)+" first.","sys");
-      setEvent(st, evBase("bait",{ mateId:st.baitTrap.mateId, text:"Bait & Switch! "+name+" rigged the next ask: on their turn, "+oppName+" MUST ask "+name+" for the "+askTargetLabel(mineT)+" first — win or lose, that's their turn spent." })); break;
+      /* BAIT & SWITCH REWORK (v28): offer one card from your hand as bait
+         and take a random card from the opponent's hand in exchange. The
+         old "rig their next ask" trap is gone entirely. */
+      var offered=me.hand.find(function(c){ return c.id===discardCardId; });
+      me.hand=me.hand.filter(function(c){ return c.id!==discardCardId; });
+      var ti=Math.floor(Math.random()*opp.hand.length); var takenB=opp.hand.splice(ti,1)[0];
+      opp.hand.push(offered); me.hand.push(takenB);
+      var prB=extractPairs(st,who); var prBO=extractPairs(st,1-who); sortHand(me); sortHand(opp);
+      var offeredFace=offered.rank+SUIT_GLYPH[offered.suit], takenFace=takenB.rank+SUIT_GLYPH[takenB.suit];
+      pushLog(st, name+" offered the "+offeredFace+" as bait and took the "+takenFace+" from "+possLow(oppName)+" hand!","sys");
+      if(prBO.length) pushLog(st, poss(name)+" offered "+offeredFace+" paired the "+pairLabel(prBO[0])+" in "+possLow(oppName)+" hand!","sys");
+      var eB=evBase("bait",{ offeredId:offered.id, takenId:takenB.id, text:"Bait & Switch! "+name+" offered the "+offeredFace+" as bait and took the "+takenFace+" from "+possLow(oppName)+" hand"+(prB.length?" — paired the "+pairLabel(prB[0])+"!"+(prBO.length?" And the offered "+offeredFace+" paired the "+pairLabel(prBO[0])+" in "+possLow(oppName)+" hand!":""):(prBO.length?" — and it paired the "+pairLabel(prBO[0])+" in "+possLow(oppName)+" hand!":".")) });
+      /* Pair attribution: the actor's pair is primary (earns the extra
+         turn). If only the OPPONENT pairs (the offered card completed
+         their pair), the event carries their pair with pairOwner so the
+         celebration credits the right pile. Both can pair at once. */
+      if(prB.length){ Object.assign(eB,pairFields(prB)); if(prBO.length){ eB.oppPairId=prBO[0]; eB.oppPairRank=pairRankFromId(prBO[0]); } }
+      else if(prBO.length){ eB.pairId=prBO[0]; eB.pairRank=pairRankFromId(prBO[0]); eB.pairOwner=1-who; }
+      setEvent(st,eB); break;
     }
     case "lucky": {
       /* DRAW 3, KEEP 1 YOU CHOOSE: the 3 hauled cards are held in
@@ -1469,8 +1661,15 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
       break;
     }
     case "whirl": {
+      opp.skipTurn=true;
+      st.whirlUsedThisTurn=true;
       pushLog(st, "Whirlpool Spin! "+oppName+" "+vrb(oppName,"lose","loses")+" "+proTheir(oppName)+" next turn — "+name+" "+vrb(name,"go","goes")+" again.","sys");
-      setEvent(st, evBase("whirl",{ text:"Whirlpool Spin! The turn order spins around — "+oppName+" "+vrb(oppName,"lose","loses")+" "+proTheir(oppName)+" next turn and "+name+" "+vrb(name,"act","acts")+" again right now!" })); break;
+      setEvent(st, evBase("whirl",{ text:"Whirlpool Spin! The turn order spins around — "+oppName+" "+vrb(oppName,"lose","loses")+" "+proTheir(oppName)+" next turn and "+name+" "+vrb(name,"act","acts")+" again right now!" }));
+      /* FREE SPIN (v28): spun after a main action (the window) — the turn
+         passes now, and the skip brings it straight back for exactly one
+         more action. Spun as the first action, the turn stays. */
+      if(st.whirlWindow){ st.whirlWindow=false; whirlPass=true; }
+      break;
     }
     case "goldie": {
       var mineG=me.hand.find(function(c){ return c.id===discardCardId; });
@@ -1520,8 +1719,13 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
      the pair keeps the turn, same as any other pair). */
   var pairedByMod = me.pairs.length>pairsBefore;
   if(pairedByMod && st.phase==="playing" && st.lastEvent) st.lastEvent.text+=" Go again!";
-  if(st.phase==="playing" && effMod!=="whirl" && !pairedByMod) passTurn(st,who);
-  if(st.phase==="playing" && (effMod==="whirl" || pairedByMod)){ st.modUsedThisTurn=false;
+  /* WHIRLPOOL (v28): a free spin from the window passes the turn now —
+     the skip brings it straight back for exactly one more action. Any
+     other modifier that banks no pair opens the window instead (if the
+     player holds an unused Whirlpool), or passes the turn. */
+  if(st.phase==="playing" && whirlPass){ passTurn(st,who); }
+  else if(st.phase==="playing" && effMod!=="whirl" && !pairedByMod){ if(!maybeWhirlWindow(st,who)) passTurn(st,who); }
+  if(st.phase==="playing" && !whirlPass && (effMod==="whirl" || pairedByMod)){ st.modUsedThisTurn=false;
     /* The earned extra action may follow spending the player's last
        modifier, so the guarantee tops them up first, same as any
        other earned turn. */
@@ -1569,55 +1773,12 @@ function applyLuckyChoice(st,who,choiceId,names){
   /* A kept card that pairs earns another action, same as any pair —
      the turn only passes when the choice made no pair. */
   if(st.phase==="playing" && prL.length){ st.lastEvent.text+=" Go again!"; if(topUpMod(st,who) && st.lastEvent) st.lastEvent.text+=" The pond deals "+name+" a fresh modifier — "+proThey(name)+" held none."; }
-  else if(st.phase==="playing") passTurn(st,who);
+  else if(st.phase==="playing" && !maybeWhirlWindow(st,who)) passTurn(st,who); /* LUCKY WHIRL WINDOW (Audit N12): a no-pair Lucky resolution is a main action — hold the turn for the free Whirlpool spin when one is held, exactly like applyAsk/applyModifier. */
   /* DISAPPEARING-MOD FIX: drain after the turn pass, as in applyAsk. */
   var oNoteL2=overflowNote(st,names);
   if(oNoteL2 && st.lastEvent) st.lastEvent.text+=oNoteL2;
   return { ok:true };
 }
-function resolveBaitTrap(st,names){
-  if(!st.baitTrap || st.phase!=="playing") return false;
-  var trap=st.baitTrap;
-  if(st.turn!==trap.forPlayer) return false;
-  st.baitTrap=null;
-  var victim=st.players[trap.forPlayer], defender=st.players[1-trap.forPlayer];
-  var vName=names[trap.forPlayer], dName=names[1-trap.forPlayer];
-  /* The phrase is rebuilt from the trap's mate id itself, so the sprung
-     ask always names the exact card the rig enforces — never a stale
-     or mismatched label. */
-  var phrase="Do you have the "+labelForMateId(trap.mateId)+"?";
-  var heldIx=defender.hand.findIndex(function(c){ return c.id===trap.mateId; });
-  st.lastOverflow=null;
-  if(heldIx>=0){
-    var taken=defender.hand.splice(heldIx,1)[0]; victim.hand.push(taken);
-    var prT=extractPairs(st,trap.forPlayer); sortHand(victim);
-    pushLog(st, "Bait & Switch sprang: "+vName+" "+vrb(vName,"were","was")+" forced to ask \""+phrase+"\" — and "+dName+" HAD it! The trap backfired.","sys");
-    var eT={ kind:"bait", actor:trap.forPlayer, askText:phrase, mateId:trap.mateId, text:"Bait & Switch sprang — "+vName+" had to ask \""+phrase+"\" and "+dName+" actually held it! "+vName+" "+vrb(vName,"take","takes")+" it"+(prT.length?" and pairs the "+pairLabel(prT[0]):"")+" — the trap backfired, and "+vName+" "+vrb(vName,"ask","asks")+" again!" };
-    if(prT.length){ eT.pairId=prT[0]; eT.pairRank=pairRankFromId(prT[0]); }
-    setEvent(st,eT);
-    ensureHand(st,trap.forPlayer);
-    if(st.phase==="playing" && topUpMod(st,trap.forPlayer) && st.lastEvent) st.lastEvent.text+=" The pond deals "+vName+" a fresh modifier — "+proThey(vName)+" held none.";
-    var oTH=overflowNote(st,names); if(oTH) st.lastEvent.text+=oTH;
-    checkEnd(st); return true;
-  }
-  var haulT=drawCards(st,trap.forPlayer,1);
-  var prT2=haulT.cards[0] ? extractPairs(st,trap.forPlayer) : [];
-  sortHand(victim);
-  var wishedT=!!(haulT.cards[0] && haulT.cards[0].id===trap.mateId);
-  pushLog(st, "Bait & Switch sprang: "+vName+" "+vrb(vName,"were","was")+" forced to ask \""+phrase+"\" — "+dName+" didn't hold it. Go Fish!","sys");
-  var eT2={ kind:"bait", actor:trap.forPlayer, askText:phrase, mateId:trap.mateId, drawnCardId:haulT.cards[0]?haulT.cards[0].id:undefined, drewMod:haulT.mods[0], text:"Bait & Switch sprang — "+vName+" "+vrb(vName,"were","was")+" FORCED to ask \""+phrase+"\" "+dName+" "+vrb(dName,"don't","doesn't")+" hold it — \"Go Fish!\" "+vName+" "+vrb(vName,"draw","draws")+" 1 and the rigged turn is spent"+(prT2.length?" — but the draw paired the "+pairLabel(prT2[0])+", so "+vName+" "+vrb(vName,"go","goes")+" again!":".") };
-  if(prT2.length){ eT2.pairId=prT2[0]; eT2.pairRank=pairRankFromId(prT2[0]); }
-  setEvent(st,eT2);
-  if(!wishedT && prT2.length===0) passTurn(st,trap.forPlayer); else { ensureHand(st,trap.forPlayer);
-    if(st.phase==="playing" && topUpMod(st,trap.forPlayer) && st.lastEvent) st.lastEvent.text+=" The pond deals "+vName+" a fresh modifier — "+proThey(vName)+" held none.";
-  }
-  /* DISAPPEARING-MOD FIX: drain after the turn pass, as in applyAsk —
-     the sprung trap's own draw and the incoming player's refill can
-     both pond a held modifier, and both swaps are narrated here. */
-  var oT=overflowNote(st,names); if(oT) st.lastEvent.text+=oT;
-  checkEnd(st); return true;
-}
-
 /* ---------------- Player-scoped view (opponent hand never leaks) ---------------- */
 function buildView(st,seat,meta){
   var me=st.players[seat], opp=st.players[1-seat], ev=st.lastEvent;
@@ -1633,13 +1794,13 @@ function buildView(st,seat,meta){
       sonar: me.sonar, sense: me.sense, scoped: me.scoped, fogged: !!me.fogged, frozen: !!me.frozen,
       luckyChoice: (st.pendingLucky && st.pendingLucky.who===seat) ? st.pendingLucky.cards.map(function(c){ return isModCard(c) ? { id:c.id, mod:c.mod } : { id:c.id, rank:c.rank, suit:c.suit }; }) : null },
     opponent: meta.names[1-seat]==null ? null : { name: meta.names[1-seat], cardCount: opp.hand.length,
-      pairs: opp.pairs, modifierCount: opp.modifiers.length, shielded: opp.shielded, ringShielded: opp.ringShielded,
+      pairs: opp.pairs, modifierCount: opp.modifiers.length, oppHasPeekSense: opp.modifiers.indexOf("peek")>=0 || opp.modifiers.indexOf("sense")>=0, shielded: opp.shielded, ringShielded: opp.ringShielded,
       fogged: !!opp.fogged, frozen: !!opp.frozen,
       online: meta.oppOnline },
     oppLastMod: st.lastMod ? st.lastMod[1-seat] : null,
-    bait: (st.baitTrap && st.baitTrap.forPlayer===seat) ? { mateId: st.baitTrap.mateId, label: labelForMateId(st.baitTrap.mateId) } : null,
     pondCount: st.deck.length,
     yourTurn: st.phase==="playing" && st.turn===seat,
+    whirlWindow: !!st.whirlWindow,
     phase: st.phase, endReason: st.endReason,
     winner: st.winner===null ? null : (st.winner==="tie" ? "tie" : (st.winner===seat ? "you" : "opponent")),
     modUsedThisTurn: st.modUsedThisTurn,
@@ -1648,7 +1809,8 @@ function buildView(st,seat,meta){
     lastEvent: ev ? { kind:ev.kind, actor: ev.actor===seat ? "you" : "opponent", rank:ev.rank, count:ev.count,
       askText: ev.askText||null, mateId: ev.mateId||null,
       drawnCard: drawnCard, drawnMod: ev.actor===seat ? (ev.drewMod||null) : null,
-      drew: ev.drawnCardId!=null || ev.drewMod!=null, pairOwner: ev.pairOwner==null ? null : (ev.pairOwner===seat ? "you" : "opponent"), goldieWhere: ev.goldieWhere||null, keptId: ev.actor===seat ? (ev.keptId||null) : null, blockedBy: ev.blockedBy||null, pairRank: ev.pairRank, pairId: ev.pairId, text: ev.text, seq: ev.seq } : null
+      drew: ev.drawnCardId!=null || ev.drewMod!=null, pairOwner: ev.pairOwner==null ? null : (ev.pairOwner===seat ? "you" : "opponent"), goldieWhere: ev.goldieWhere||null, keptId: ev.actor===seat ? (ev.keptId||null) : null, blockedBy: ev.blockedBy||null, pairRank: ev.pairRank, pairId: ev.pairId, text: ev.text, seq: ev.seq,
+      tossedId: ev.tossedId||null, lostIds: ev.lostIds||null, gainedId: ev.gainedId||null, gainedMod: ev.gainedMod||null, offeredId: ev.offeredId||null, takenId: ev.takenId||null, oppPairId: ev.oppPairId||null, oppPairRank: ev.oppPairRank||null, topUpPairs: ev.topUpPairs||null } : null
   };
 }
 
@@ -1662,8 +1824,13 @@ function botStep(st,names){
   /* A Lucky Lure the bot hauled is waiting on its keep-1 pick — the bot
      chooses for itself (mate first, then a mod, then the first fish). */
   if(st.pendingLucky && st.pendingLucky.who===1){ var pickB=luckyAutoPick(st.pendingLucky.cards, bot.hand); applyLuckyChoice(st,1,pickB?pickB.id:null,names); return true; }
-  /* A Bait & Switch trap springs first — it IS the bot's turn. */
-  if(st.baitTrap && st.baitTrap.forPlayer===1){ resolveBaitTrap(st,names); return true; }
+  /* WHIRLPOOL WINDOW (v28): after the bot's main action, if it holds an
+     unused Whirlpool Spin the turn holds — spin it (free) for another
+     action, or end the turn. */
+  if(st.whirlWindow){
+    if(bot.modifiers.indexOf("whirl")>=0){ var rw=applyModifier(st,1,"whirl",undefined,names); if(rw.ok) return true; }
+    endTurn(st,1); return true;
+  }
   /* Known mate first: Mate Sense / a Sonar hit point at a specific mate,
      and asking for it beats spending the turn on a modifier. The intel
      is re-validated against the CURRENT hands on every step: a Sonar
@@ -1679,7 +1846,20 @@ function botStep(st,names){
     var liveSense=bot.sense.filter(function(sm){ return human.hand.some(function(c){ return c.id===sm.id; }) && bot.hand.some(function(c){ return mateIdOf(c)===sm.id; }); });
     if(liveSense.length) sensedMate=liveSense[Math.floor(Math.random()*liveSense.length)];
   }
-  var sensedCard = sensedMate ? bot.hand.find(function(c){ return mateIdOf(c)===sensedMate.id; }) : null;
+  /* READINESS (Nov 12, 2026): the CPU also remembers a mate from Peek
+     (bot.peeked — the 3 cards it glimpsed in the human's hand) and from
+     the human's own prior asks (st.humanAsks — a card the human asked
+     for is a card the human holds; if the bot later holds its mate, the
+     hook knows where it lives). Same live validation as Sense: the
+     human must still hold the card and the bot must hold its mate.
+     Priority: Sense, then Peek, then prior ask. */
+  function liveKnownMate(ids){
+    if(!ids || !ids.length) return null;
+    var live=ids.filter(function(id){ return human.hand.some(function(c){ return c.id===id; }) && bot.hand.some(function(c){ return mateIdOf(c)===id; }); });
+    return live.length ? live[Math.floor(Math.random()*live.length)] : null;
+  }
+  var knownMateId = (sensedMate && sensedMate.id) || liveKnownMate((bot.peeked||[]).map(function(p){ return p.id; })) || liveKnownMate(st.humanAsks);
+  var sensedCard = knownMateId ? bot.hand.find(function(c){ return mateIdOf(c)===knownMateId; }) : null;
   if(sensedCard && Math.random()<0.9){ noteBotAsk(st,sensedCard); applyAsk(st,1,sensedCard,names); return true; }
   /* One action per turn: the bot weighs its modifiers seriously and plays
      one when it's useful — it does not hoard them. */
@@ -1687,7 +1867,7 @@ function botStep(st,names){
     var M=bot.modifiers;
     function has(m){ return M.indexOf(m)>=0; }
     var humanMods=human.modifiers.length;
-    var sensedMine = sensedMate ? bot.hand.find(function(c){ return mateIdOf(c)===sensedMate.id; }) : null;
+    var sensedMine = sensedCard; /* READINESS: same known mate as the direct-ask path (Sense, Peek, or prior ask) */
     var singles=bot.hand.filter(function(c){ return bot.hand.filter(function(x){ return pairIdFor(x)===pairIdFor(c); }).length===1; });
     var choice=null, targetId;
     if(has("reel") && human.pairs.length>0 && Math.random()<0.9) choice="reel";
@@ -1696,7 +1876,7 @@ function botStep(st,names){
     else if(has("sense") && bot.hand.length>0 && human.hand.length>0 && !human.fogged && Math.random()<0.7) choice="sense";
     else if(has("goldie") && bot.hand.length>0 && Math.random()<0.6){ choice="goldie"; targetId=bot.hand[Math.floor(Math.random()*bot.hand.length)].id; }
     else if(has("peek") && human.hand.length>0 && !human.fogged && Math.random()<0.5) choice="peek";
-    else if(has("fog") && humanMods>=1 && Math.random()<0.6) choice="fog";
+    else if(has("fog") && humanMods>=1 && Math.random() < ((human.modifiers.indexOf("peek")>=0 || human.modifiers.indexOf("sense")>=0) ? 0.8 : 0.35)) choice="fog";
     else if(has("shield") && !bot.ringShielded && humanMods>0 && Math.random()<0.75) choice="shield";
     else if(has("anchor") && !bot.shielded && humanMods>0 && Math.random()<0.75) choice="anchor";
     else if(has("mirror") && st.lastMod[0] && Math.random()<0.55){ choice="mirror"; if(MOD_NEEDS_TARGET[st.lastMod[0]] && bot.hand.length) targetId=bot.hand[0].id; }
@@ -1704,7 +1884,7 @@ function botStep(st,names){
     else if(has("lucky") && st.deck.length>=3 && bot.hand.length<=4 && Math.random()<0.55) choice="lucky";
     else if(has("snatch") && human.hand.length>=3 && Math.random()<0.65) choice="snatch";
     else if(has("storm") && human.hand.length>=4 && Math.random()<0.6) choice="storm";
-    else if(has("bait") && bot.hand.length>0 && Math.random()<0.45){ choice="bait"; targetId=bot.hand[Math.floor(Math.random()*bot.hand.length)].id; }
+    else if(has("bait") && bot.hand.length>0 && Math.random()<0.45){ choice="bait"; var offerPool=singles.length?singles:bot.hand; targetId=offerPool[Math.floor(Math.random()*offerPool.length)].id; }
     else if(has("monster") && bot.hand.length>=3 && Math.random()<0.4) choice="monster";
     else if(has("swap") && singles.length>0 && Math.random()<0.5){ choice="swap"; targetId=singles[0].id; }
     if(choice){
@@ -1713,7 +1893,11 @@ function botStep(st,names){
     }
   }
   if(bot.hand.length===0){
-    var breakers=["snatch","storm","double","whirl","reel"];
+    /* DRIFT FIX (N5): only the worker's game-extending breakers can
+       rescue an empty hand — Snatch or Reel In. Storm returns nothing
+       to the empty player, Whirlpool gains no card, Double Cast is not
+       a breaker in the worker's checkEnd. Matches engine.js BREAKERS. */
+    var breakers=["snatch","reel"];
     for(var bi=0;bi<breakers.length;bi++){
       if(bot.modifiers.indexOf(breakers[bi])>=0){
         var r0=applyModifier(st,1,breakers[bi],undefined,names);
@@ -1745,7 +1929,7 @@ function $(id){ return document.getElementById(id); }
 var els = {};
 ["lobby","game","nameInput","lobbyMsg","soloBtn","createBtn","modeChip","turnBanner","pondChip","muteBtn","leaveBtn",
  "sceneWrap","oppChip","convoStrip","hudTop","hudBottom","waitPanel","cancelWaitBtn",
- "oppPile","youPile","intelBar","intelLines","modPanel","luckyPanel","handTitle","handHint","handRow","layRow","layBtn","drawNote",
+ "oppPile","youPile","intelBar","intelLines","modPanel","luckyPanel","peekPanel","sensePanel","narrPanel","handTitle","handHint","handRow","layRow","layBtn","endTurnRow","endTurnBtn","drawNote",
  "logList","toast","modListHow",
  "hostPanel","hostCode","hostHint","hostStatus","hostRetryBtn","copyCodeBtn","cancelHostBtn",
  "joinCodeInput","joinBtn","waitCode","waitText","waitStatus","waitError","retryWaitBtn",
@@ -1767,6 +1951,9 @@ var lastSeqSeen=0;
 var wasMyTurn=false;
 var finishedSoundPlayed=false;
 var celebratedSeq=0;
+var peekPanelData=null;   // v28 Fix 6: { cards:[{id,rank,suit}], seq } — the peek result, kept on screen until dismissed (NOT cleared by clearIntel)
+var sensePanelData=null;  // v28 Fix 4: { found:[{id,rank,suit}], seq } — the mate-sense result, kept on screen until dismissed (NOT cleared by clearIntel)
+var narrPanelData=null;  // T1/T2 fix: { title, text, seq } — a LONG modifier/blocked narration (20+ words), kept on screen until dismissed (NOT cleared by clearIntel)
 var prevPairCounts=null;
 var suppressDealCeleb=false; /* REMATCH SWEEP: set the moment a rematch is tapped (dropPendingPresentations) — the pair-count watcher in render() must not fire a deal-pair PAIR! celebration for the new game, whatever the stale counts say. Consumed (cleared) by that watcher on the start event it guards. */
 var pairOverlayTimer=null;
@@ -1857,7 +2044,7 @@ function bubblesFor(ev,v){
         set(ev.actor, pl);
       }
       break;
-    case "blocked": set(ev.actor, ev.blockedBy==="anchor" ? "Blocked! ⚓" : "Blocked! 🛡️"); break;
+    case "blocked": set(ev.actor, ev.blockedBy==="anchor" ? "Blocked! ⚓" : ev.blockedBy==="fog" ? "Blocked! 🌫️" : ev.blockedBy ? "Blocked! 🛟" : "Blocked!"); break;
     default:
       if(ev.pairId){ set(ev.pairOwner||ev.actor, "Pair — "+pairLabel(ev.pairId)+"! 🎉"); }
       else if(KIND_TO_MOD[ev.kind]){ var inf=MODIFIER_INFO[KIND_TO_MOD[ev.kind]]; set(ev.actor, inf.icon+" "+inf.name+"!"); }
@@ -1893,10 +2080,16 @@ var stripBarEl=null, stripTypingEl=null, stripDotsEl=null, stripPendingShown=nul
    a 1s animation delay, THEN a 1.5–2.3s CPU thinking pause, all in
    series — made a two-message turn take 12s+ of pure waiting.
    Now each message holds for ITS OWN reading time (stripHoldFor:
-   ~20ms per character on a 0.8s base, clamped 1.0–1.9s after the
-   pacing fix — a short "Go Fish!" gets ~1.1s, a long modifier
-   narration up to 1.9s, and the full text always stays in the move
-   log + intel lines below).
+   300ms per word at 200wpm on a 0.6s base, clamped 2.0–9.0s — a short
+   "Go Fish!" gets ~2s, a 23-word Storm Surge narration ~7.5s, and the
+   full text always stays in the move log + intel lines below. The
+   longest modifier narrations (20+ words) ALSO get a persistent
+   narration panel, like the Mate Sense / Peek panels, so they stay
+   readable even after the strip moves on. A newer event's first
+   message may take the bar once the current message has had 2s to
+   register (STRIP_PREEMPT_MS in pumpStrip) — so reading-time holds
+   never stall the next answer behind a 9s hold; the preempted text
+   survives in the log and, for long narrations, in the panel.
    ANIM_DELAY_MS is 350ms: the words land, a beat later the
    3D animation starts, and the animation plays WHILE the
    message is still up being read — reading and watching overlap
@@ -1904,23 +2097,37 @@ var stripBarEl=null, stripTypingEl=null, stripDotsEl=null, stripPendingShown=nul
    (strip reading time or the animation itself), never the sum, and
    its thinking pause is 0.8–1.3s. Net effect: every message is
    readable, every animation is seeable, and no turn idles. */
-var STRIP_MIN_MS=1100; /* fallback hold when a message has no computed reading time */
-function stripHoldFor(text){
-  /* PACING FIX (test games: a full game took 61 minutes): the old hold
-     was 1.9–3.4s PER MESSAGE, and one event queues 3–5 messages, so a
-     single turn stacked 6–17s of pure reading holds — and every gate
-     (CPU step, input release, FX start) waited for the whole queue to
-     drain, so the backlog compounded turn over turn into 30–150s card
-     locks. Holds are now ~1.0–1.9s: long enough to read a line while
-     its animation plays over it, short enough that a queue can never
-     snowball. The full text always stays in the move log below. */
-  var len=String(text||"").length;
-  var ms=650+len*16;
-  return Math.max(900, Math.min(1600, ms));
+var STRIP_MIN_MS=2000; /* fallback hold when a message has no computed reading time */
+var STRIP_ASK_HOLD_MS=1300; /* T2: your own ask ("Do you have the…?") holds only 1.3s — it is YOUR words, you just tapped the card, and the CPU's answer must land promptly after it (the old 1274ms ask hold is preserved exactly) */
+var STRIP_DENIAL_HOLD_MS=1800; /* T1/T2: the denial ("Nope, don't have that one — Go Fish!") is a fixed phrase the player has seen dozens of times; it holds 1.8s (longer than the old 1.27s) and then yields, so the draw narration queued behind it gets to take the bar before the next event prunes it */
+var STRIP_PREEMPT_MS=2000; /* T1/T2: a newer event's first message may take the bar once the current message has had 2s to register, even if its full reading-time hold has not elapsed */
+var STRIP_ASK_PREEMPT_MS=1000; /* T2 FIX (Nov 11, 2026): when the message on the bar is an ASK, a newer event may take the bar after 1.0s, not 2s — the asker already knows what they asked, so the answer must not wait out the full 2s floor. Answers, modifier results and draws keep the full 2000ms floor. */
+function stripHoldFor(text,isAsk){
+  /* T1 (Nov 11, 2026 audit): the old hold was 650+len*16ms, clamped
+     900–1600ms — a 9-word median message needs 2700ms at 200wpm and
+     got 1258ms; a 41-word narration needs 12.3s and got 1.6s. The
+     hold is now the message's READING TIME at 200wpm (300ms/word,
+     +600ms for the bar to register), clamped 2.0–9.0s. The 41-word
+     case still caps at 9.0s (73% of its 12.3s) — it is covered by the
+     persistent narration panel instead of an unbounded hold, so a
+     single message can never stall the game for 12s.
+     T2 FIX (Nov 11, 2026): an ASK holds at most STRIP_ASK_HOLD_MS
+     (1300ms) — the cap applies AFTER the [2000,9000] clamp, so
+     min(clamped,1300)=1300. Before this fix the clamp overrode the
+     cap and every ask held >=2000ms (a 9-word ask held 3300ms, so the
+     CPU's answer — same event, same seq, no preemption — landed at
+     ~4.5s after a CPU ask). Answers, modifier results and draws keep
+     the full clamped hold. */
+  var words=String(text||"").trim().split(/\s+/).filter(Boolean).length;
+  var ms=600+words*300;
+  var clamped=Math.max(2000, Math.min(9000, ms));
+  if(isAsk) return Math.min(clamped, STRIP_ASK_HOLD_MS);
+  return clamped;
 }
 var ANIM_DELAY_MS=350; /* a beat after a message appears, its animation starts — independent of the message's reading-time hold */
 var stripCurrentHold=STRIP_MIN_MS; /* reading-time hold of the message currently on the bar */
-var stripQueue=[], stripShownAt=0, stripTimer=null;
+var stripQueue=[], stripShownAt=0, stripTimer=null, stripShownSeq=0; /* T1/T2: seq of the message currently on the bar, for the preemption rule in pumpStrip */
+var stripShownIsAsk=false; /* T2 FIX: whether the message currently on the bar is an ask — its preemption floor is STRIP_ASK_PREEMPT_MS (1s), not STRIP_PREEMPT_MS (2s) */
 var stripDenialSeq=0, stripDenialShownAt=0; /* FIX ROUND 4 (1): seq + shown-time of the denial message currently on the bar */
 var stripEventSeq=0, stripEventShownAt=0; /* TIMING PASS (this pass): seq + shown-time of the most recent strip message to actually take the bar, for ANY event — the gate that lines every event's visuals up with its words */
 var stripPushCount=0; /* TIMING PASS: total strip messages ever pushed (pushEventToStrip returns how many it added) */
@@ -1953,26 +2160,74 @@ function showStripDots(){
   s.innerHTML=' 💭<span class="dots"></span>';
   d.appendChild(s); stripDotsEl=s;
 }
-function pushStripMsg(who,name,text,tag,seq){
+function pushStripMsg(who,name,text,tag,seq,holdOverride){
   if(!els.convoStrip || !text) return;
   stripPushCount++;
-  stripQueue.push({who:who,name:name,text:text,tag:tag||null,seq:seq||0,hold:stripHoldFor(text)});
+  /* PHASE-2 FIX 2 (queue jump, Nov 12, 2026 — Jenna-approved): the
+     player's own tapped ask (seq 0, tag "ask" — the pending bubble)
+     jumps the queue. Older unshown messages are dropped (the move log
+     keeps the history; same rule as the PACING FIX prune in
+     pushEventToStrip), except a queued denial, which the
+     denial-before-draw gate still needs to see on the bar. Without
+     this the ask sat behind stale messages until the next event's
+     prune freed it — up to 9s — even though the on-bar cap above
+     already fired. */
+  if(tag==="ask" && !seq){
+    stripQueue=stripQueue.filter(function(m){ return m.tag==="denial"; });
+  }
+  stripQueue.push({who:who,name:name,text:text,tag:tag||null,seq:seq||0,hold:holdOverride||stripHoldFor(text, tag==="ask")});
   pumpStrip();
 }
 /* Show the next queued strip message once the current one has had its
    full minimum display time. The typing dots are not a message — they
-   append to the message already on screen, so they never reset this. */
+   append to the message already on screen, so they never reset this.
+   T1/T2 PREEMPTION: a newer event's first message may take the bar
+   once the current message has had STRIP_PREEMPT_MS (2s) to register,
+   even if its full reading-time hold (up to 9s) has not elapsed —
+   otherwise every long narration would delay the next answer by up
+   to 9s. The preempted message is not lost: the move log keeps the
+   full history, and a long modifier/blocked narration also stays in
+   the persistent narration panel until dismissed. */
 function pumpStrip(){
   if(!els.convoStrip) return;
   if(stripTimer){ clearTimeout(stripTimer); stripTimer=null; }
   if(!stripQueue.length) return;
   var now=Date.now();
   var wait=stripCurrentHold-(now-stripShownAt);
+  /* T2 FIX: the preemption floor is STRIP_ASK_PREEMPT_MS (1s) when the
+     message on the bar is an ask, STRIP_PREEMPT_MS (2s) otherwise.
+     A seq-0 ask (your pending ask, shown while the CPU thinks) has no
+     event seq, so the seq comparison alone would never preempt it —
+     an ask on the bar is preemptible by any newer event's first
+     message. Same-event messages share the seq and still get their
+     full hold each (the answer behind a CPU ask waits the ask's
+     now-capped 1300ms hold). */
+  var _nextSeq=stripQueue[0].seq;
+  var _nextIsNewer=_nextSeq && (stripShownSeq ? _nextSeq>stripShownSeq : stripShownIsAsk);
+  if(_nextIsNewer){
+    var _preemptMs=stripShownIsAsk ? STRIP_ASK_PREEMPT_MS : STRIP_PREEMPT_MS;
+    var preemptWait=_preemptMs-(now-stripShownAt);
+    if(preemptWait<wait) wait=preemptWait;
+  }
+  /* PHASE-2 FIX 2 (Nov 12, 2026 — Jenna-approved): the player's own
+     tapped ask (seq 0, tag "ask" — the pending bubble queued by
+     doAsk/onFishTap) preempts the message on the bar AT ONCE: it takes
+     the bar in this very pumpStrip call (wait=0), instead of waiting
+     out a 7–9s narration. The 300ms cap tried first measured 1.8–
+     11.9s in this sandbox: loop turns run ~2.7s under SwiftShader and
+     every intervening push re-arms the timer, so a cap never fires on
+     time here — immediate display is the brief's primary wording and
+     has no timer to starve. The 2000ms floor for non-tap events and
+     the 1000ms ask floor are unchanged, as is the ask's own 1300ms
+     hold once it is on the bar. */
+  if(stripQueue[0].tag==="ask" && !stripQueue[0].seq) wait=0;
   if(stripShownAt && wait>0){ stripTimer=setTimeout(pumpStrip, wait); return; }
   var m=stripQueue.shift();
   hideStripTyping();
   setStripBar("cmsg"+(m.who==="you"?" you":" opp"), m.who, m.name, esc(m.text));
   stripShownAt=Date.now();
+  if(m.seq) stripShownSeq=m.seq; /* T1/T2: the bar's message seq, for the preemption rule above */
+  stripShownIsAsk=(m.tag==="ask"); /* T2 FIX: the bar's message ask-ness, for the preemption floor above */
   stripCurrentHold=m.hold||STRIP_MIN_MS; /* OVERHAUL: this message now holds for its own reading time, not a fixed 5s */
   /* FIX ROUND 4 (1): when the denial itself takes the bar, stamp it, so
      the deferred draw (deferFxUntilDenial) can tell when ANIM_DELAY_MS
@@ -1984,7 +2239,28 @@ function pumpStrip(){
      pump just replaced the bar, so re-append them (e.g. your ask, shown
      while the answer is still coming). They never reset the timer. */
   if(thinking) showStripDots();
-  if(stripQueue.length) stripTimer=setTimeout(pumpStrip, stripCurrentHold);
+  if(stripQueue.length){
+    /* T1/T2: the timer for the NEXT message uses the same preemption
+       bound as the wait above — a newer event already queued behind
+       the message that just took the bar must not wait out its full
+       reading-time hold (up to 9s) when no further push will ever
+       re-invoke pumpStrip to shorten the timer. Same-event messages
+       share the seq, so they still get their full hold each. */
+    var dly=stripCurrentHold;
+    /* T2 FIX: same ask-aware preemption bound as the wait above — a
+       newer event already queued behind the message that just took the
+       bar uses the 1s ask floor when that message is an ask (including
+       a seq-0 pending ask), else the 2s floor. */
+    var _nextNewer=stripQueue[0].seq && (m.seq ? stripQueue[0].seq>m.seq : m.tag==="ask");
+    if(_nextNewer){ var _pm=(m.tag==="ask")?STRIP_ASK_PREEMPT_MS:STRIP_PREEMPT_MS; if(_pm<dly) dly=_pm; }
+    /* PHASE-2 FIX 2: same tap-ask immediacy for the timer set here — a
+       tapped ask queued behind the message that just took the bar is
+       shown on the next turn (dly=0) instead of waiting out its full
+       reading-time hold. (In practice the queue jump puts the ask at
+       the head, so this path is the preserved-denial case only.) */
+    if(stripQueue[0].tag==="ask" && !stripQueue[0].seq) dly=0;
+    stripTimer=setTimeout(pumpStrip, dly);
+  }
 }
 /* True while strip messages are still owed their reading time —
    either queued behind the one on screen, or the one on screen is
@@ -1994,18 +2270,20 @@ function stripBacklog(){
   if(stripQueue.length) return true;
   return !!(stripShownAt && (Date.now()-stripShownAt)<stripCurrentHold);
 }
-/* PACING FIX — the CPU gate's strip test. stripBacklog() above waits
-   for EVERY queued message to finish its full reading hold, which is
-   what turned each CPU step into a 10–20s wait (and, chained, the
-   30–150s locks). The gate now only needs the conversation to be
-   nearly caught up: at most one message still queued (it will take
-   the bar while the CPU "thinks", and stays readable underneath the
-   thinking dots) and the message on the bar has had a brief moment
-   (650ms) to register. Reading and thinking overlap instead of
-   adding up; the message on screen still gets its full hold before
-   anything replaces it, because pumpStrip owns the bar. */
+/* T2 — the CPU gate's strip test. stripBacklog() above waits for EVERY
+   queued message to finish its full reading hold, which is what turned
+   each CPU step into a 10–20s wait (and, chained, the 30–150s locks).
+   The old gate below it waited for the queue to drain to <=1 — with
+   reading-time holds (2–9s per message, T1) that drain alone would
+   put every CPU answer 4–10s behind the ask, exactly the tail the
+   Nov 11 audit measured (p75 3.9s, p90 5.2s, max 10.3s). The gate
+   now only needs the message on the bar to have registered (650ms):
+   queued messages are pruned when a new event lands, the CPU's own
+   messages take the bar via the pumpStrip preemption rule once the
+   current message has had 2s, and the message on screen still gets
+   its full hold before anything replaces it, because pumpStrip owns
+   the bar. */
 function stripGateClear(){
-  if(stripQueue.length>1) return false;
   if(stripShownAt && (Date.now()-stripShownAt)<650) return false;
   return true;
 }
@@ -2195,7 +2473,7 @@ function showStripTyping(name){
   if(stripTypingEl && stripTypingEl.parentNode===els.convoStrip) return;
   stripTypingEl=setStripBar("cmsg typing opp", "opponent", name, '💭 Thinking<span class="dots"></span>');
 }
-function clearStrip(){ clearPairCelebration(); /* a new game / leaving sweeps any stale PAIR! pill + confetti with the strip */ if(els.convoStrip) els.convoStrip.innerHTML=""; stripBarEl=null; stripTypingEl=null; stripDotsEl=null; stripPendingShown=null; stripAskTextShown=null; stripQueue=[]; stripShownAt=0; stripCurrentHold=STRIP_MIN_MS; if(stripTimer){ clearTimeout(stripTimer); stripTimer=null; } busy=false; /* NEW ITEM 4: a stranded input lock dies with the strip on a new game / leave */ stripDenialSeq=0; stripDenialShownAt=0; /* FIX ROUND 4 (1): a new game / leaving abandons any go-fish presentation still waiting on its denial — the old draw must not play in the new game. */ if(deferredFx){ var pd=deferredFx; deferredFx=null; if(pd.timer) clearTimeout(pd.timer); if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false); } if(deferredShownFx){ var ps=deferredShownFx; deferredShownFx=null; if(ps.timer) clearTimeout(ps.timer); if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false); } stripEventSeq=0; stripEventShownAt=0; drawNoteReadySeq=0; drawNoteText=""; /* v24 TIMING: a new game / leave drops any released draw note with the strip */ }
+function clearStrip(){ clearPairCelebration(); /* a new game / leaving sweeps any stale PAIR! pill + confetti with the strip */ peekPanelData=null; sensePanelData=null; narrPanelData=null; /* v28 Fix 4/6 + T1: a new game drops the persistent peek/sense/narration panels too */ if(els.convoStrip) els.convoStrip.innerHTML=""; stripBarEl=null; stripTypingEl=null; stripDotsEl=null; stripPendingShown=null; stripAskTextShown=null; stripQueue=[]; stripShownAt=0; stripShownSeq=0; stripShownIsAsk=false; /* T2 FIX: a new game drops the ask-ness of the bar's message with the rest of the strip state */ stripCurrentHold=STRIP_MIN_MS; if(stripTimer){ clearTimeout(stripTimer); stripTimer=null; } busy=false; /* NEW ITEM 4: a stranded input lock dies with the strip on a new game / leave */ stripDenialSeq=0; stripDenialShownAt=0; /* FIX ROUND 4 (1): a new game / leaving abandons any go-fish presentation still waiting on its denial — the old draw must not play in the new game. */ if(deferredFx){ var pd=deferredFx; deferredFx=null; if(pd.timer) clearTimeout(pd.timer); if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false); } if(deferredShownFx){ var ps=deferredShownFx; deferredShownFx=null; if(ps.timer) clearTimeout(ps.timer); if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false); } stripEventSeq=0; stripEventShownAt=0; drawNoteReadySeq=0; drawNoteText=""; /* v24 TIMING: a new game / leave drops any released draw note with the strip */ }
 function pushEventToStrip(ev,v){
   if(!ev || !v) return 0;
   var _pc0=stripPushCount; /* TIMING PASS: report how many messages this event added */
@@ -2214,7 +2492,7 @@ function pushEventToStrip(ev,v){
   var bs=bubblesFor(ev, v);
   var order = ev.actor==="you" ? ["you","opponent"] : ["opponent","you"];
   var pushed=0;
-  order.forEach(function(w){ if(bs[w]){ if(stripAskTextShown && bs[w].text===stripAskTextShown){ stripAskTextShown=null; return; } /* FIX ROUND 4 (1): the denial bubble is the one the draw waits for — tag it with the event seq so pumpStrip can stamp when it takes the bar. */ var dTag=null; if(bs[w].text.indexOf("Nope, don't have that one")===0 || bs[w].text.indexOf("My haul paired")===0) dTag="denial"; pushStripMsg(w, bs[w].name, bs[w].text, dTag, ev.seq); pushed++; } });
+  order.forEach(function(w){ if(bs[w]){ if(stripAskTextShown && bs[w].text===stripAskTextShown){ stripAskTextShown=null; return; } /* FIX ROUND 4 (1): the denial bubble is the one the draw waits for — tag it with the event seq so pumpStrip can stamp when it takes the bar. */ var dTag=null; if(bs[w].text.indexOf("Nope, don't have that one")===0 || bs[w].text.indexOf("My haul paired")===0) dTag="denial"; else if(ev.askText && bs[w].text===ev.askText) dTag="ask"; /* T2 FIX: the ask bubble itself is tagged "ask", so stripHoldFor caps its hold at 1300ms (after the clamp) and pumpStrip preempts it at the 1s ask floor — this is the CPU's ask (your own ask is normally skipped here as the pending-bubble duplicate) */ pushStripMsg(w, bs[w].name, bs[w].text, dTag, ev.seq, dTag==="denial" ? STRIP_DENIAL_HOLD_MS : undefined); pushed++; } });
   var isMod = !!(KIND_TO_MOD[ev.kind] || ev.kind==="blocked");
   if(isMod || ev.kind==="start" || !pushed){
     if(ev.text) pushStripMsg(ev.actor, actorName, ev.text, null, ev.seq);
@@ -2224,8 +2502,37 @@ function pushEventToStrip(ev,v){
     var ix=ev.text.indexOf("drew a 4th modifier");
     var st=ev.text.lastIndexOf(". ", ix);
     pushStripMsg(ev.actor, actorName, ev.text.slice(st>=0?st+2:0), null, ev.seq);
+  } else if(ev.text && (ev.text.indexOf(" And on the refill,")>=0 || ev.text.indexOf(" The refill banked")>=0)){
+    /* TOP-UP NARRATION (integration adjustment, Jenna Nov 11 2026):
+       a pair banked by the refill is appended to ev.text, but for
+       ask/pair/draw events ev.text itself is never pushed to the strip
+       (only the short bubbles are) — so the clause was invisible on
+       the strip (narration probeA2: stripShowedClause false) even
+       though it was in the log and the event text. Surface just the
+       refill clause as this event's own strip message (same seq,
+       actor's name), exactly like the 4th-modifier sentence above: it
+       queues directly behind the event's bubbles, so it is part of
+       this event's strip sequence, not a late trailing append. It is
+       NOT folded into the last bubble — for asks the last bubble is
+       the opponent's denial/answer, and the refill belongs to the
+       actor. Mod events already push ev.text whole, so this branch
+       only runs when ev.text was not pushed. */
+    var _ta=ev.text.indexOf(" And on the refill,");
+    var _tb=ev.text.indexOf(" The refill banked");
+    var _tix=(_ta>=0 && (_tb<0 || _ta<_tb)) ? _ta+1 : _tb+1;
+    pushStripMsg(ev.actor, actorName, ev.text.slice(_tix), null, ev.seq);
   }
-  if(ev.kind==="blocked") pushStripMsg(ev.actor, actorName, ev.blockedBy==="anchor" ? "⚓ Result: BLOCKED by the Anchor — that modifier didn't work. The Anchor is spent, and the modifier card is gone." : "🛟 Result: BLOCKED by the Life Ring — that modifier didn't work. The Life Ring is spent, and the modifier card is gone.", null, ev.seq);
+  if(ev.kind==="blocked"){
+    /* The result names the shield that ACTUALLY blocked — never a
+       default Life Ring. blockedBy rides the event from both engines;
+       when it is missing (older / live-server events) the message stays
+       generic and names no shield at all. */
+    var blockedMsg = ev.blockedBy==="anchor" ? "⚓ Result: BLOCKED by the Anchor — that modifier didn't work. The Anchor is spent, and the modifier card is gone."
+      : ev.blockedBy==="fog" ? "🌫️ Result: BLOCKED by the Fog Bank — that modifier didn't work. The Fog Bank is spent, and the modifier card is gone."
+      : ev.blockedBy ? "🛟 Result: BLOCKED by the Life Ring — that modifier didn't work. The Life Ring is spent, and the modifier card is gone."
+      : "Result: BLOCKED — that modifier didn't work, and the modifier card is gone.";
+    pushStripMsg(ev.actor, actorName, blockedMsg, null, ev.seq);
+  }
   var intel=privateIntelLine(v);
   if(intel) pushStripMsg(ev.actor, actorName, intel, null, ev.seq);
   return stripPushCount-_pc0;
@@ -2234,7 +2541,7 @@ function pushEventToStrip(ev,v){
 function cardFace(c){ return c.rank + SUIT_GLYPH[c.suit]; }
 /* Anti-ignore nudge: a modifier that would genuinely help RIGHT NOW glows
    and pulses in your hand, and the hint line names the best one. */
-var MOD_TIP = { reel:"steal a pair from their pile", goldie:"Goldie fetches a mate — from the pond or their hand", magnet:"you know a mate is in their hand — hook it", sense:"scan your whole hand for mates", peek:"see 3 of their cards", whirl:"take another turn right after", fog:"hide your hand from their info mods", shield:"block their next Snatch or Storm", anchor:"block their next steal", double:"draw 2, no strings", lucky:"draw 3, keep 1 you choose", snatch:"steal a card blind", storm:"scatter 2 of their cards", bait:"rig their next ask", mirror:"copy the last mod they played", monster:"trade 1 of yours for 2 fresh", swap:"dump a dead card, draw fresh" };
+var MOD_TIP = { reel:"steal a pair from their pile", goldie:"Goldie fetches a mate — from the pond or their hand", magnet:"you know a mate is in their hand — hook it", sense:"scan your whole hand for mates", peek:"see 3 of their cards", whirl:"free action — spin it and go again", fog:"stays up until a Peek or Mate Sense fizzles on it", shield:"block their next Snatch or Storm", anchor:"block their next steal", double:"draw 2, no strings", lucky:"draw 3, keep 1 you choose", snatch:"steal a card blind", storm:"scatter 2 of their cards", bait:"offer a card, take one of theirs", mirror:"copy the last mod they played", monster:"trade 1 of yours for 2 fresh", swap:"dump a dead card, draw fresh" };
 function modUseful(m,v){
   var you=v.you, opp=v.opponent; if(!opp || v.phase!=="playing" || !v.yourTurn) return false;
   var deck=v.pondCount;
@@ -2248,7 +2555,7 @@ function modUseful(m,v){
     case "lucky": return deck>=3;
     case "shield": return !you.ringShielded && opp.modifierCount>0;
     case "anchor": return !you.shielded && opp.modifierCount>0;
-    case "fog": return !you.fogged && opp.modifierCount>0;
+    case "fog": return !you.fogged && (opp.oppHasPeekSense!==undefined ? opp.oppHasPeekSense : opp.modifierCount>0); /* Audit C: fog blocks only Peek/Mate Sense — glow only when the opponent holds one (older live views without the field fall back to any-mod). */
     case "goldie": case "bait": return you.hand.length>0;
     case "mirror": return !!v.oppLastMod;
     case "whirl": return true;
@@ -2277,6 +2584,7 @@ function modBlockedReason(m,v){
     case "shield": return you.ringShielded ? "Your Life Ring is already up." : null;
     case "fog": return you.fogged ? "A Fog Bank is already hiding your hand." : null;
     case "snatch": return (opp && opp.cardCount===0) ? "Their hand is empty — nothing to take." : null;
+    case "bait": return (opp && opp.cardCount===0) ? "Their hand is empty — nothing to take in exchange." : null;
     case "storm": return (opp && opp.cardCount===0) ? "Their hand is empty — nothing to scatter." : null;
     case "double": case "swap": case "lucky": return v.pondCount===0 ? "The pond is empty." : null;
     default: return null;
@@ -2297,7 +2605,7 @@ function privateIntelLine(v){
   }
   if(ev.kind==="anchor") return "⚓ Anchor result: your Anchor is DOWN — the next Blind Snatch or Magnet Hook aimed at you will fizzle.";
   if(ev.kind==="shield") return "🛟 Life Ring result: your Life Ring is UP — the next Blind Snatch or Storm Surge aimed at you will fizzle.";
-  if(ev.kind==="fog") return "🌫️ Fog Bank result: your hand is HIDDEN for "+possLow(oppName)+" turn — their Peek and Mate Sense will fizzle, and their asks are blind guesses.";
+  if(ev.kind==="fog") return "🌫️ Fog Bank result: your hand is HIDDEN — their Peek and Mate Sense will fizzle on it, and the fog lifts. It stays up until then.";
   if(ev.kind==="reel") return "🪝 Reel In result: that pair is YOURS now — check your pair pile. Their pile lost one, yours gained one.";
   /* Goldie: no private line — the event text already names the card, the
      source (pond / their hand / already banked) and the pair, so a second
@@ -2365,7 +2673,7 @@ function celebratePair(v, ev){
     if(scEl) scEl.textContent="You "+sv.you.pairs.length+" — "+sv.opponent.pairs.length;
     var mtEl=els.oppChip ? els.oppChip.querySelector(".opp-meta") : null;
     if(mtEl){
-      var sh=[sv.opponent.shielded?"⚓ anchor down":"", sv.opponent.ringShielded?"🛡️ ring up":"", sv.opponent.fogged?"🌫️ fogged":""].filter(Boolean).join(" · ");
+      var sh=[sv.opponent.shielded?"⚓ anchor down":"", sv.opponent.ringShielded?"🛟 ring up":"", sv.opponent.fogged?"🌫️ fogged":""].filter(Boolean).join(" · ");
       /* FIX v22 (Bug 4): the opponent's card count is ALL cards held
          (fish + modifiers), matching the hand header's "4 fish · 3
          mods" total. cardCount from the server is fish only; the
@@ -2520,7 +2828,7 @@ function render(){
      (see the seq block at the bottom of render). The event narration
      itself is pushed by pushEventToStrip — the yellow banner is gone. */
   if(thinking){
-    if(pendingBubble && stripPendingShown!==pendingBubble){ stripPendingShown=pendingBubble; stripAskTextShown=pendingBubble.text; pushStripMsg("you", v.you.name, pendingBubble.text); }
+    if(pendingBubble && stripPendingShown!==pendingBubble){ stripPendingShown=pendingBubble; stripAskTextShown=pendingBubble.text; pushStripMsg("you", v.you.name, pendingBubble.text, "ask", 0, STRIP_ASK_HOLD_MS); /* T2: your own ask holds only 1.3s (see STRIP_ASK_HOLD_MS) so the CPU's answer lands promptly after it — tagged "ask" so pumpStrip preempts it at the 1s ask floor */ }
     if(pendingBubble) showStripDots(); // your ask stays up, dots run after it
     else showStripTyping(opp?opp.name:"Computer");
   } else {
@@ -2539,9 +2847,8 @@ function render(){
     : '<div class="intel-line">🎯 <b>Mate Sense:</b> none of your mates are in their hand right now.</div>');
   if(v.you.shielded) lines.push('<div class="intel-line">⚓ <b>Anchor down</b> — the next Snatch or Magnet aimed at you fizzles.</div>');
   if(v.you.ringShielded) lines.push('<div class="intel-line">🛟 <b>Life Ring up</b> — the next Snatch or Storm aimed at you fizzles.</div>');
-  if(v.you.fogged) lines.push('<div class="intel-line">🌫️ <b>Fog Bank</b> — your hand is hidden for their turn: no Peek or Mate Sense can see it.</div>');
-  if(v.bait) lines.push('<div class="intel-line">🪤 <b>Bait &amp; Switch!</b> Your next ask is rigged — you must ask for the <b>'+esc(v.bait.label)+'</b> first. That\'s your turn.</div>');
-  if(opp && opp.fogged) lines.push('<div class="intel-line">🌫️ <b>'+esc(opp.name)+' is fogged</b> — your Peek and Mate Sense can\'t see their hand this turn.</div>');
+  if(v.you.fogged) lines.push('<div class="intel-line">🌫️ <b>Fog Bank</b> — your hand is hidden: no Peek or Mate Sense can see it. The first one aimed at you fizzles and the fog lifts.</div>');
+  if(opp && opp.fogged) lines.push('<div class="intel-line">🌫️ <b>'+esc(opp.name)+' is fogged</b> — your Peek and Mate Sense can\'t see their hand. Playing one fizzles it and strips their fog.</div>');
   els.intelBar.style.display = lines.length ? "block" : "none";
   els.intelLines.innerHTML = lines.join("");
   /* hand */
@@ -2553,7 +2860,7 @@ function render(){
   else if(armed){
     var ai=MODIFIER_INFO[armed.mod];
     if(ai){
-      els.handHint.textContent = ai.icon+" Armed — tap one of your fish cards"+(armed.mod==="magnet" ? " and the hook hunts its exact mate." : armed.mod==="goldie" ? " and Goldie hunts its exact mate — pond or their hand." : " to toss it back.");
+      els.handHint.textContent = ai.icon+" Armed — tap one of your fish cards"+(armed.mod==="magnet" ? " and the hook hunts its exact mate." : armed.mod==="goldie" ? " and Goldie hunts its exact mate — pond or their hand." : armed.mod==="bait" ? " to offer as bait — you'll take a random card from their hand in exchange." : " to toss it back.");
       els.handHint.className="hand-hint armed";
     } else {
       /* SAFETY NET (v27 freeze fix): a poisoned armed state ({mod:null} or an unknown id) used to throw on ai.icon here and freeze every render — and, when the throw landed inside waitForStripThenCpu, it killed the CPU gate (thinking stuck true, bot step never scheduled). Clear the poisoned state and show the default hint instead of throwing. */
@@ -2599,11 +2906,18 @@ function render(){
     if(dnText) els.drawNote.textContent = dnText;
   }
   var myTurnActive = v.yourTurn && v.phase==="playing" && !busy && !thinking && !(v.you.luckyChoice && v.you.luckyChoice.length);
+  /* v28 Fix 4: the Mate Sense highlight — your cards whose mate was found
+     in the opponent's hand (from the persistent sense panel) stay
+     highlighted until the panel is dismissed. */
+  var senseHitIds=null;
+  if(sensePanelData && sensePanelData.found && sensePanelData.found.length){
+    senseHitIds={};
+    sensePanelData.found.forEach(function(f){ senseHitIds[mateIdOf(f)]=true; });
+  }
   var html="";
   v.you.hand.forEach(function(c){
-    var glow = ""; // ITEM 4 (Mate Sense): the pink hand-glow is gone - the matching cards lift/fan in the 3D scene instead.
-    var baitOut = !!(window.SceneFX && SceneFX.baitDangleCardId && SceneFX.baitDangleCardId()===c.id); // BAIT HAND SYNC: while this card dangles on the Bait & Switch line, its hand copy is hidden — only one copy on screen
-    html += '<button class="card-btn'+(armed&&myTurnActive?" targetable":"")+(baitOut?" bait-out":"")+'" data-fish="'+esc(c.id)+'" '+(myTurnActive?"":"disabled")+' aria-label="Ask for the '+esc(mateFace(c))+" — the other "+colorOf(c.suit)+" "+esc(c.rank)+" (your "+esc(c.rank)+" of "+SUIT_NAME[c.suit]+")"+'">'
+    var glow = (senseHitIds && senseHitIds[c.id]) ? " sense-hit" : ""; // v28 Fix 4: the card it found stays highlighted
+    html += '<button class="card-btn'+(armed&&myTurnActive?" targetable":"")+'" data-fish="'+esc(c.id)+'" '+(myTurnActive?"":"disabled")+' aria-label="Ask for the '+esc(mateFace(c))+" — the other "+colorOf(c.suit)+" "+esc(c.rank)+" (your "+esc(c.rank)+" of "+SUIT_NAME[c.suit]+")"+'">'
       + '<span class="pcard'+(isRed(c.suit)?" red":"")+glow+'"><span class="r">'+esc(c.rank)+" "+SUIT_GLYPH[c.suit]+'</span><span class="mid">'+SUIT_GLYPH[c.suit]+'</span><span class="r bot">'+esc(c.rank)+" "+SUIT_GLYPH[c.suit]+"</span></span></button>";
   });
   v.you.modifiers.forEach(function(m){
@@ -2625,9 +2939,15 @@ function render(){
   });
   /* lay down */
   els.layRow.style.display = (v.you.heldPairs && v.you.heldPairs.length && v.yourTurn && v.phase==="playing") ? "block" : "none";
+  /* v28 Fix 3: End Turn button — only while the Whirlpool window is open
+     (the player has played a card and holds an unused Whirlpool). */
+  els.endTurnRow.style.display = (v.whirlWindow && v.yourTurn && v.phase==="playing") ? "block" : "none";
   /* modifier panel */
   renderModPanel(v);
   renderLuckyPanel(v);
+  renderPeekPanel(v);
+  renderSensePanel(v);
+  renderNarrPanel(v);
   /* finished — the top end banner is the only game-over panel */
   if(v.phase==="finished"){
     if(!finishedSoundPlayed){ finishedSoundPlayed=true; if(v.winner==="you"){ Sound.win(); spawnConfetti(); } else if(v.winner==="opponent") Sound.lose(); }
@@ -2660,6 +2980,47 @@ function render(){
     }
     var first = lastSeqSeen===0;
     lastSeqSeen=ev.seq;
+    /* v28 Fix 4 / Fix 6: capture a Peek / Mate Sense result the moment it
+       lands, into client-side state that survives clearIntel() — the
+       panels below stay on screen until the player taps to dismiss
+       them, so a result that "went by too fast" can be re-read. */
+    if(ev.actor==="you"){
+      if(ev.kind==="peek" && v.you.peeked && v.you.peeked.length) peekPanelData={ cards:v.you.peeked.slice(), seq:ev.seq };
+      if(ev.kind==="sense" && v.you.sense) sensePanelData={ found:v.you.sense.slice(), seq:ev.seq };
+    }
+    /* T1: a LONG narration (20+ words) gets a persistent panel too —
+       either actor, the text is public. Short narrations rely on the
+       reading-time strip hold; the longest ones stay on screen until
+       dismissed, like the Mate Sense / Peek panels, so they can be
+       re-read after the strip moves on. A newer long narration
+       replaces the panel.
+       T2 FIX (Nov 11, 2026): the trigger used to be mod/blocked
+       events only, so a 35-word Go Fish draw narration ("Go Fish!"
+       + haul, ~10.5s to read) got cut short at ~2.9s with no panel.
+       ANY event text of 20+ words now gets the panel — draws, pairs,
+       ask-hits and the opening deal narration included — with a title
+       naming the kind of narration it is.
+       INTEGRATION ADJUSTMENT (Jenna, Nov 11, 2026 — item 6 threshold):
+       routine Go Fish draws are ~20-25 words and popped a panel dozens
+       of times per game, so DRAW-type events (ask_miss/fish_wish) need
+       30+ words — only compound draws (draw + pair bank, draw + top-up,
+       draw + 4th-modifier overflow) reach that. Mod/blocked and all other
+       narrations need 32+ words (readiness pass, Nov 12, 2026 — was 26).
+       Routine "pair" events need 35+ words or a refill bank (topUpPairs)
+       — a plain pair narration, however wordy up to 34 words, never pops
+       the panel on its own. */
+    if(ev.text){
+      var _nw=String(ev.text).trim().split(/\s+/).length;
+      /* PHASE-2 FIX 1 (Nov 12, 2026 — Jenna-approved): routine pair
+         events are excluded — a "pair" event pops the panel only when
+         the refill banked with it (ev.topUpPairs present) or its text
+         is 35+ words. Draws keep the 30-word bar; mod/blocked and all
+         other narrations move from 20 to 32 words (26 in Phase-2 Fix 1). */
+      var _isPair=ev.kind==="pair";
+      var _hasTopUp=!!(ev.topUpPairs && ev.topUpPairs.length);
+      var _narrMin=(ev.kind==="ask_miss"||ev.kind==="fish_wish")?30:(_isPair?35:32);
+      if((_isPair ? (_hasTopUp || _nw>=_narrMin) : _nw>=_narrMin)){ var _inf=KIND_TO_MOD[ev.kind]?MODIFIER_INFO[KIND_TO_MOD[ev.kind]]:null; var _title=_inf ? (_inf.icon+" "+_inf.name) : ev.kind==="blocked" ? "Blocked!" : (ev.kind==="ask_miss"||ev.kind==="fish_wish") ? "Go Fish! 🎣" : ev.kind==="pair" ? "Pair! 🎉" : ev.kind==="ask_hit" ? "Got it! 🎉" : "📖 Narration"; narrPanelData={ title: _title, text: ev.text, seq: ev.seq }; }
+    }
     drawNoteText=""; /* v24 STICKY NOTE: a new event supersedes the previous draw note — the old text must not linger into the new event. The new event's own note is set when its FX fires (releaseDrawNote). */
     if(!first){
       /* FIX ROUND 4 (1): a stale go-fish presentation (its denial was
@@ -2787,8 +3148,68 @@ function renderLuckyPanel(v){
     b.addEventListener("click", function(){ Sound.tap(); chooseLucky(b.getAttribute("data-lucky-choice")); });
   });
 }
+function renderPeekPanel(v){
+  /* v28 Fix 6: the Peek result stays on screen until dismissed — the
+     three cards are shown face-up as real cards (like Lucky Lure's
+     display), plus their names. The 3D fan shows them in the pond
+     centre too; this DOM panel is the persistent copy. */
+  if(!peekPanelData || !peekPanelData.cards || !peekPanelData.cards.length){ els.peekPanel.style.display="none"; els.peekPanel.innerHTML=""; return; }
+  var oppName=v.opponent?v.opponent.name:"your opponent";
+  var names=peekPanelData.cards.map(function(c){ return cardFace(c); }).join(", ");
+  var htmlP="<h3>🔭 Peek — "+esc(oppName)+" has these 3 cards</h3><p>Three cards from "+esc(possLow(oppName))+" hand, shown face-up in the centre of the pond. They stay here until you dismiss them.</p><div class=\"peek-row\">";
+  peekPanelData.cards.forEach(function(c){
+    htmlP += '<span class="pcard'+(isRed(c.suit)?" red":"")+'"><span class="r">'+esc(c.rank)+" "+SUIT_GLYPH[c.suit]+'</span><span class="mid">'+SUIT_GLYPH[c.suit]+'</span><span class="r bot">'+esc(c.rank)+" "+SUIT_GLYPH[c.suit]+"</span></span>";
+  });
+  htmlP += "</div><p class=\"peek-names\" style=\"margin-top:8px\">"+esc(names)+"</p><button class=\"btn\" id=\"peekDismissBtn\" style=\"margin-top:10px\">Got it</button>";
+  els.peekPanel.style.display="block";
+  els.peekPanel.innerHTML=htmlP;
+  var d=$("peekDismissBtn");
+  if(d) d.addEventListener("click", function(){ Sound.tap(); peekPanelData=null; renderPeekPanel(v); });
+}
+function renderSensePanel(v){
+  /* v28 Fix 4: the Mate Sense result stays on screen until dismissed,
+     and the cards it found stay highlighted in your hand (see the
+     sense-hit class in the hand render). */
+  if(!sensePanelData || !sensePanelData.found){ els.sensePanel.style.display="none"; els.sensePanel.innerHTML=""; return; }
+  var oppName=v.opponent?v.opponent.name:"your opponent";
+  var found=sensePanelData.found;
+  var htmlS;
+  if(!found.length){
+    htmlS="<h3>🎯 Mate Sense — no mates found</h3><p>None of your cards have their exact mate (same number + same colour) in "+esc(possLow(oppName))+" hand right now. This stays here until you dismiss it.</p><button class=\"btn\" id=\"senseDismissBtn\" style=\"margin-top:10px\">Got it</button>";
+  } else {
+    var names=found.map(function(c){ return cardFace(c); }).join(", ");
+    htmlS="<h3>🎯 Mate Sense — mates found!</h3><p>"+esc(oppName)+" is holding the mate"+(found.length>1?"s":"")+" of your card"+(found.length>1?"s":"")+": <span class=\"sense-names\">"+esc(names)+"</span>. Your matching card"+(found.length>1?"s are":" is")+" highlighted in your hand — tap one to ask for its exact mate. This stays here until you dismiss it.</p><div class=\"sense-row\">";
+    found.forEach(function(c){
+      htmlS += '<span class="pcard'+(isRed(c.suit)?" red":"")+'"><span class="r">'+esc(c.rank)+" "+SUIT_GLYPH[c.suit]+'</span><span class="mid">'+SUIT_GLYPH[c.suit]+'</span><span class="r bot">'+esc(c.rank)+" "+SUIT_GLYPH[c.suit]+"</span></span>";
+    });
+    htmlS += "</div><button class=\"btn\" id=\"senseDismissBtn\" style=\"margin-top:10px\">Got it</button>";
+  }
+  els.sensePanel.style.display="block";
+  els.sensePanel.innerHTML=htmlS;
+  var d=$("senseDismissBtn");
+  if(d) d.addEventListener("click", function(){ Sound.tap(); sensePanelData=null; renderSensePanel(v); render(); });
+}
+function renderNarrPanel(v){
+  /* T1 fix: a long modifier/blocked narration stays on screen until
+     dismissed — the same persistent pattern as the Peek / Mate Sense
+     panels. The strip still shows the narration for its reading-time
+     hold, and the move log keeps the full history; this DOM panel is
+     the re-readable copy for the longest messages. */
+  if(!narrPanelData || !narrPanelData.text){ els.narrPanel.style.display="none"; els.narrPanel.innerHTML=""; return; }
+  els.narrPanel.style.display="block";
+  els.narrPanel.innerHTML="<h3>"+esc(narrPanelData.title)+"</h3><p>"+esc(narrPanelData.text)+"</p><p style=\"opacity:.8\">This stays here until you dismiss it — the full text is also in the move log below.</p><button class=\"btn\" id=\"narrDismissBtn\" style=\"margin-top:10px\">Got it</button>";
+  var d=$("narrDismissBtn");
+  if(d) d.addEventListener("click", function(){ Sound.tap(); narrPanelData=null; renderNarrPanel(v); });
+}
 function renderModPanel(v){
-  if(!selectedMod){ els.modPanel.style.display="none"; return; }
+  /* ARMED ROOT CAUSE (Audit K3): the panel used to hide with display:none
+     but left its innerHTML — including #modPlayBtn with its listener — in
+     the DOM, so a stale/double tap could arm {mod:null} from a cleared
+     selection (the v27 freeze). The click handler validates now, but the
+     stale button itself is the producer: remove it. No selection, no
+     button — a hidden panel has nothing to tap. The handler guard and
+     the render() net stay as safety nets. */
+  if(!selectedMod || !MODIFIER_INFO[selectedMod]){ els.modPanel.style.display="none"; els.modPanel.innerHTML=""; selectedMod=null; return; }
   var inf=MODIFIER_INFO[selectedMod], art=MODIFIER_ART[selectedMod];
   var needs=MOD_NEEDS_TARGET[selectedMod];
   var blurb=inf.blurb;
@@ -2820,9 +3241,11 @@ function renderModPanel(v){
   if(play) play.addEventListener("click", function(){
     Sound.tap();
     var m=selectedMod, tries=0;
-    if(!m || !MODIFIER_INFO[m]) return; /* STALE PANEL FIX (v27 freeze root cause): the panel hides with display:none when the selection clears, but the old Play button stays in the DOM — a tap on it (script-driven, or a double-tap racing the hide) reads selectedMod as null and armed {mod:null}, which threw in render() and froze the UI. A null/unknown selection is never a real play: ignore the tap. */
+    if(!m || !MODIFIER_INFO[m]) return; /* STALE PANEL FIX (v27 freeze root cause, hardened Audit K3): the panel now clears its innerHTML when the selection clears, so no stale Play button survives in the DOM at all — but a tap racing the hide (script-driven, or a double-tap) still reads selectedMod first. A null/unknown selection is never a real play: ignore the tap. */
     (function go(){
       if(selectedMod!==m) return; /* the panel moved on — this tap is stale */
+      if(!MODIFIER_INFO[m]) return; /* ARMED ROOT CAUSE: re-validate at FIRE time — go() can run ~6s after the tap, after the game moved on. A bad id can never be armed, however stale the tap. */
+      if(view && view.you && view.you.modifiers && view.you.modifiers.indexOf(m)===-1) return; /* the mod left the hand while the arm waited — never arm a mod you don't hold */
       if((busy||thinking) && tries++<40){ setTimeout(go, 150); return; } /* an animation is finishing: wait it out (up to ~6s) rather than dropping the play */
       if(needs){ armed={ mod:m }; selectedMod=null; render(); }
       else { selectedMod=null; playModifier(m, undefined, undefined); }
@@ -2838,6 +3261,7 @@ function onFishTap(card){
   Sound.tap();
   if(armed){
     var m=armed.mod; armed=null;
+    if(!m || !MODIFIER_INFO[m]){ render(); return; } /* ARMED ROOT CAUSE: a poisoned arm ({mod:null} / unknown id) is dropped here, never sent to the engine or the host — the render net would clear it anyway; this closes the last consumer of armed.mod. */
     playModifier(m, card.id, undefined);
     return;
   }
@@ -2855,13 +3279,6 @@ function onModTap(m){
      it opens and the hand never moves — no scrolling needed. */
 }
 function doAsk(card){
-  /* BAIT & SWITCH, client side (every mode): while the rig is set
-     against you, the only ask that may leave this client is the rigged
-     one — any other tapped card is refused with the reason, and the
-     turn is NOT spent. The solo engine enforces the same rule in
-     applyAsk; this check is what enforces it in live rooms too, where
-     the view's bait target is the authority this client has. */
-  if(view && view.bait && mateIdOf(card)!==view.bait.mateId){ toast("🪤 Bait & Switch! Your next ask is rigged — you must ask for the "+view.bait.label+" first. That's your turn."); return; }
   if(mode==="guest"||mode==="host"){ sendToHost({ t:"ask", card:card.id }); return; }
   if(mode==="solo"){
     busy=true; thinking=true; pendingBubble={ text:askPhrase(card) };
@@ -2901,21 +3318,6 @@ function afterChange(){
   refreshLocal();
   if(mode==="host") sendViewToGuest();
   maybeCpu();
-  checkBait();
-}
-function checkBait(){
-  /* Bait & Switch set against YOU springs on your turn automatically —
-     the rigged ask happens, in the open, and spends your turn. */
-  if(mode!=="solo" || !S || busy) return;
-  if(S.pendingLucky) return;
-  if(S.phase==="playing" && S.baitTrap && S.baitTrap.forPlayer===0 && S.turn===0){
-    busy=true; thinking=false; render();
-    setTimeout(function(){
-      resolveBaitTrap(S,names);
-      afterChange();
-      releaseBusyWhenFxDone(); // ANIM PASS (8): the spring animation plays out first
-    }, 550); /* PACING FIX: 0.55s (was 0.9s) — the trap was already announced in the strip when it was set, so this beat only needs to register "something is springing" before the rigged ask lands. */
-  }
 }
 function refreshLocal(){
   if(!S) return;
@@ -2999,7 +3401,7 @@ function releaseBusyWhenFxDone(){
        cast/flight that carries the action has landed by then, the
        tail (pair flight to the pile, bursts, rings) keeps playing
        visually, and the hand unlocks as soon as the player can act. */
-    var relCap = (window.SceneFX && SceneFX.baitDangling && SceneFX.baitDangling()) ? 660 : 150; /* BAIT DANGLE: same spring protection when the COMPUTER set the trap — checkBait() below springs it the moment this lock clears, so the release waits out the full dangle (see waitForStripThenCpu) */
+    var relCap = 150; /* bait-dangle gate removed with the dead dangle machinery (Audit D): the cap is always 150 now. */
     if(fxFramesSince(busyReleaseStartFrame,busyReleaseStartWall)<relCap){ setTimeout(releaseBusyWhenFxDone, 120); return; }
   }
   busyReleaseStartFrame=0; busyReleaseStartWall=0;
@@ -3023,13 +3425,6 @@ function releaseBusyWhenFxDone(){
      fires once per actual turn change (lastTurnSet guard), and the
      event seq block only fires on a new ev.seq. */
   if(S.turn===0){ render();
-    /* BAIT & SWITCH SPRING FIX: afterChange's checkBait ran while the
-       deferred-FX pass held busy=true (render re-locks input until the
-       event's words show), so a trap set against the player never
-       sprang — the player just took a free turn and the Learned panel
-       stayed up forever. Now that the lock is actually clear, check
-       again: a pending trap springs here, before the player can act. */
-    checkBait();
   }
 }
 /* ANIM PASS (8) + OVERHAUL: the CPU's step waits for BOTH the strip
@@ -3055,26 +3450,33 @@ function waitForStripThenCpu(){
   var chain = cpuChain>0;
   var fxBusy = (window.SceneFX && SceneFX.animBusy) ? SceneFX.animBusy() : false;
   /* The FX wait is wall-bounded like the player's input release (see
-     releaseBusyWhenFxDone): ~2.5s for a fresh CPU step, ~0.75s inside
-     a chain — never the old 1200-frame (~20s) failsafe, which scene
-     time's fixed 1/60s-per-frame step turned into the normal path on
-     any display under 60fps. A step that fires while the previous
-     effect's tail is still playing is safe: trigger() never wipes
-     live FX, so the two overlap briefly and both read clearly. */
-  var fxCap = chain ? 45 : 150;
-  /* BAIT DANGLE (Jenna, real play: the dips were never seen): while a
-     Bait & Switch dangle is live, the trap must NOT spring — the
-     normal cap is wall-clock (~2.5s) but scene time runs 1/60 per
-     rendered frame, so on a sub-60fps display the spring fired at
-     ~1.25–2.5 game-seconds and killed the dangle before its dips.
-     The cap rises to 660 frame-equivalents (~11s wall, a hard bound)
-     so the gate waits out the full 3 game-second dangle at any
-     realistic frame rate; animBusy() still ends the wait the moment
-     the dangle actually finishes. */
-  if(window.SceneFX && SceneFX.baitDangling && SceneFX.baitDangling()) fxCap = Math.max(fxCap, 660);
+     releaseBusyWhenFxDone): ~2.0s for a fresh CPU step (T2: was 2.5s —
+     the longest FX tails, storm 5.4s / confetti 4.6s, kept the gate
+     waiting long after the action itself had landed; the effect keeps
+     playing visually while the CPU acts, trigger() never wipes live
+     FX), ~0.75s inside a chain — never the old 1200-frame (~20s)
+     failsafe, which scene time's fixed 1/60s-per-frame step turned
+     into the normal path on any display under 60fps. A step that
+     fires while the previous effect's tail is still playing is safe:
+     trigger() never wipes live FX, so the two overlap briefly and
+     both read clearly. */
+  var fxCap = chain ? 45 : 120;
   var stripOk = chain
-    ? (stripQueue.length<=2 && (!stripShownAt || (Date.now()-stripShownAt)>=300))
+    ? (stripEventSeq>=lastSeqSeen && (!stripShownAt || (Date.now()-stripShownAt)>=300))
     : stripGateClear();
+  /* T2 FIX (regression caught by the after-fix solo probe): the gate
+     must ALSO wait until the latest event's first strip message has
+     actually taken the bar (stripEventSeq>=lastSeqSeen) — the first
+     message of an ask event IS the answer (the denial / "Yes!"), and
+     pushEventToStrip prunes unshown older messages when the NEXT event
+     lands. Without this, the CPU's next step fired while the denial
+     was still queued and the denial was pruned before it ever showed:
+     the strip jumped from ask to the CPU's next ask with no answer.
+     The wait is short in practice (the answer is first in its event's
+     queue and takes the bar after at most the 2s preemption bound),
+     and a 3s wall failsafe covers events that push no strip message
+     at all, so a message-less event can never stall the CPU. */
+  if((stripEventSeq<lastSeqSeen) && (Date.now()-cpuGateStartWall)<=3000) stripOk=false;
   if(!stripOk || (fxBusy && fxFramesSince(cpuGateStartFrame,cpuGateStartWall)<fxCap)){ setTimeout(waitForStripThenCpu, 150); return; }
   cpuGateStartFrame=0; cpuGateStartWall=0;
   thinking=true;
@@ -3095,6 +3497,16 @@ function waitForStripThenCpu(){
 els.layBtn.addEventListener("click", function(){
   if(mode==="guest"||mode==="host"){ sendToHost({ t:"lay" }); return; }
   var r=layDownPairs(S,mySeat,names);
+  if(!r.ok){ toast(r.error); return; }
+  busy=true;
+  afterChange();
+  releaseBusyWhenFxDone();
+});
+els.endTurnBtn.addEventListener("click", function(){
+  /* v28 Fix 3: end the turn without spinning the Whirlpool (the window
+     is open — the player played a card and holds an unused Whirlpool). */
+  if(mode==="guest"||mode==="host"){ sendToHost({ t:"endTurn" }); return; }
+  var r=endTurn(S,mySeat);
   if(!r.ok){ toast(r.error); return; }
   busy=true;
   afterChange();
@@ -3348,6 +3760,22 @@ function connectRoomSocket(role){
     socketFailed(role, opened ? "the connection closed" : "couldn't connect");
   };
 }
+
+/* READINESS (Nov 12, 2026): mobile lock-screen / app-switch reconnect.
+   The OS can kill a backgrounded WebSocket without onclose ever firing
+   (or the 4-retry budget can run out while the phone is locked). When
+   the tab is visible again, if we are in a live room and the socket is
+   not open, reconnect to the same 6-letter code with a fresh retry
+   budget — the server re-sends the current view on join, so the screen
+   matches the server. A healthy socket (open, or still connecting) is
+   left alone. */
+document.addEventListener("visibilitychange", function(){
+  if(document.hidden) return;
+  if((mode==="host"||mode==="guest") && roomCode && roomCode.length===6){
+    var sockDead = !ws || ws.readyState===2 || ws.readyState===3 || (ws.readyState===1 && !connOpen);
+    if(sockDead){ reconnectAttempt=0; connectRoomSocket(mode); }
+  }
+});
 
 /* Solo — fully local, works offline, never touches the room server. */
 els.soloBtn.addEventListener("click", function(){
@@ -3658,10 +4086,8 @@ var SceneFX = (function(){
   var fxProps=[], boltMesh=null, boltT=9, boltAt=null;
   var boltVariant=-1; /* FIX ROUND 7: which strike variant the live bolt currently carries (-1 = none yet); tick() rebuilds the bolt whenever a new strike starts with a different variant. */
   var BOLT_STRIKE_SPOTS=[{x:-1.15,z:0.25,tip:-0.05},{x:0.95,z:-0.55,tip:0.35},{x:0.05,z:0.85,tip:0}]; /* FIX ROUND 7: each strike lands at a DIFFERENT spot around boltAt (left / right / centre-forward) with its variant's tip x, so the three strikes read as three separate events in three places. */
-  var baitDangleGen=0; /* BAIT SINGLE-INSTANCE, generation guard: bumped by every clearBaitDangle()/clearOneShotFx(). A dangle prop whose spawn was DEFERRED by the spawnProp backlog is not in fxProps yet, so the sweep cannot see it — the generation is how a superseded dangle recognises itself the moment its fn first runs and removes itself instead of becoming the second copy Jenna saw. */
-  var baitDangleCard=null; /* BAIT HAND SYNC (Jenna, real play: "the same card was still fully visible in my hand at the same time — TWO copies on screen at once"): the id of the setter's chosen card while its dangle is live. The game rules keep that card in the setter's hand (the trap references its mate), so the HAND copy is hidden for exactly the dangle's life — set when the dangle is created, cleared when it ends, is swept, or the trap springs — leaving the dangling card as the ONLY copy on screen. render() reads baitDangleCardId() so a mid-dangle re-render keeps it hidden; syncBaitHand() covers the gap between the trigger and the next render. */
   var boatGroup=null, prop=null;
-  var trapBuoy=null, lastTurnSet=null, anchorChain=null; // ANIM PASS: persistent bait buoy + turn-change guard + anchor chain
+  var lastTurnSet=null, anchorChain=null; // turn-change guard + anchor chain
   var backTex=null;
   var lilies=[], swayers=[], schoolFish=[], waterDetailTex=null, sheenDetailTex=null, fabricTexCache=null;
   var foamPlane=null;
@@ -3675,6 +4101,31 @@ var SceneFX = (function(){
      init(); tick() only updates transforms, opacities and instance
      matrices — nothing is created per frame. */
   var lapFoamMesh=null;
+  var heron=null, logGrp=null, bankFoam=null; // DRAW-CALL GUARD: hoisted from init() so the guard can hide/show them (were init-local vars)
+  /* DRAW-CALL GUARD (Nov 11 2026, fix-drawcalls): the <800 draw-call
+     guardrail had NO enforcement in code — only FPS-based context-loss
+     degrade, which never looks at draw calls. The guard below reads
+     renderer.info.render.calls every rendered frame (the same number
+     the harness samples as window.__gfInfo.calls) and degrades
+     GRACEFULLY when the count approaches the guardrail, never breaking
+     play: level 1 (>=740) hides ambient life only — dragonflies,
+     school fish, clouds, fireflies, sun sparkles, bubbles, pollen /
+     butterflies (~50 calls) — and level 2 (>=770) additionally hides
+     pond dressing — heron, log + turtle, orbiting debris, ripple /
+     wave rings, lapping + bank foam (~46 calls). Gameplay is never
+     touched: anglers, pier, boat, pond, cards, FX props, flights,
+     monster, storm, confetti and the particle pool always render.
+     Recovery is hysteretic: the count must stay under 690 for a
+     continuous 1500ms of WALL-CLOCK time (performance.now()) before
+     one level restores, so nothing flickers — a frame count would
+     assume 60fps (1.5s at 60Hz, 3s at 30Hz, 0.75s at 120Hz, and
+     minutes at VM frame rates). One level restores per calm period.
+     Worst single-frame FX addition after the FX merges below is ~25
+     calls, so level 2 at 770 still caps the next frame under 800.
+     Observable: window.__gfInfo gains dcPeak/dcLevel/dcHidden, and
+     SceneFX._dbg() gains dc:{calls,peak,level,hidden}. */
+  var dcPeak=0, dcLevel=0, dcCalmMs=0, dcLastGuardMs=0, dcLastCalls=0;
+  var DC_L1=740, DC_L2=770, DC_RECOVER=690, DC_CALM_MS=1500;
   var bubbleMesh=null, bubbleData=[], bubbleSpots=[];
   var ambMesh=null, ambData=[];
   var poolMesh=null, poolParts=[];
@@ -4388,32 +4839,51 @@ var SceneFX = (function(){
 
   /* ---------------- pond monster ---------------- */
   function makeMonster(){
+    /* DRAW-CALL FIX (Nov 11 2026): the monster was 39 separate meshes
+       (39 draw calls every leap). Only the JAW moves independently
+       (tick() sets monsterJaw.rotation.x; everything else moves with
+       the group). The static body parts are merged by SHARED material
+       into ONE mesh (8 material groups = 8 calls) and the jaw parts
+       into ONE mesh inside the jaw group (3 material groups = 3
+       calls), so the leap costs 11 calls instead of 39. Same
+       geometries, same materials, same positions/rotations/scales —
+       mergeParts bakes each part's own transform into the merged
+       geometry, and the jaw group keeps its exact origin so the snap
+       animation is unchanged. */
     var grp=new THREE.Group();
     var green=mat(0x2e7d4f,{roughness:0.5}), dark=mat(0x1d5c38,{roughness:0.55}), belly=mat(0xbfe3b0,{roughness:0.55});
-    var body=new THREE.Mesh(new THREE.SphereGeometry(1.05,16,12), green); body.scale.set(1,0.92,1.5); body.castShadow=true; grp.add(body);
-    var bel=new THREE.Mesh(new THREE.SphereGeometry(0.85,12,10), belly); bel.scale.set(0.85,0.7,1.1); bel.position.set(0,-0.3,0.45); grp.add(bel);
-    var headM=new THREE.Mesh(new THREE.SphereGeometry(0.8,16,12), green); headM.position.set(0,0.3,1.3); headM.castShadow=true; grp.add(headM);
-    put(grp, box(0.95,0.3,0.75,green), 0,0.32,1.95); // snout
+    var eyeWhite=mat(0xffffff,{roughness:0.3}), blackM=mat(0x111111), teethM=mat(0xffffff), clawM=mat(0xfdf8ec), spikeM=mat(0x6a3598,{roughness:0.55}), tongueM=mat(0xe88aa0,{roughness:0.6});
+    var bodyParts=[
+      { geo:new THREE.SphereGeometry(1.05,16,12), mat:green, x:0, y:0, z:0, sx:1, sy:0.92, sz:1.5 },
+      { geo:new THREE.SphereGeometry(0.85,12,10), mat:belly, x:0, y:-0.3, z:0.45, sx:0.85, sy:0.7, sz:1.1 },
+      { geo:new THREE.SphereGeometry(0.8,16,12), mat:green, x:0, y:0.3, z:1.3 },
+      { geo:new THREE.BoxGeometry(0.95,0.3,0.75), mat:green, x:0, y:0.32, z:1.95 }, // snout
+      { geo:new THREE.ConeGeometry(0.55,1.2,6), mat:dark, x:0, y:0.15, z:-2.0, rx:-1.9, sz:0.4 } // tail
+    ];
     [-0.16,0.16].forEach(function(x){ // nostrils
-      put(grp, new THREE.Mesh(new THREE.SphereGeometry(0.05,6,5), dark), x,0.5,2.28);
+      bodyParts.push({ geo:new THREE.SphereGeometry(0.05,6,5), mat:dark, x:x, y:0.5, z:2.28 });
     });
     [-0.36,0.36].forEach(function(x){
-      var eye=new THREE.Mesh(new THREE.SphereGeometry(0.18,10,8), mat(0xffffff,{roughness:0.3})); eye.position.set(x,0.78,1.72); grp.add(eye);
-      var pup=new THREE.Mesh(new THREE.SphereGeometry(0.085,8,6), mat(0x111111)); pup.position.set(x,0.82,1.87); grp.add(pup);
-      var brow=put(grp, box(0.3,0.07,0.07,dark), x,1.0,1.78); brow.rotation.z=x>0?-0.4:0.4;
-      var fin=new THREE.Mesh(new THREE.ConeGeometry(0.24,0.66,6), dark); fin.position.set(x*2.5,0.15,0.15); fin.rotation.z=x>0?-1.25:1.25; grp.add(fin);
-      var arm=new THREE.Group(); arm.position.set(x*2.1,-0.15,0.7); grp.add(arm);
-      put(arm, cyl(0.11,0.14,0.7,green), 0,-0.3,0.1).rotation.x=0.5;
-      for(var ci=0;ci<3;ci++){ var claw=new THREE.Mesh(new THREE.ConeGeometry(0.05,0.22,5), mat(0xfdf8ec)); claw.position.set((ci-1)*0.12,-0.68,0.3); claw.rotation.x=2.6; arm.add(claw); }
+      bodyParts.push({ geo:new THREE.SphereGeometry(0.18,10,8), mat:eyeWhite, x:x, y:0.78, z:1.72 });
+      bodyParts.push({ geo:new THREE.SphereGeometry(0.085,8,6), mat:blackM, x:x, y:0.82, z:1.87 });
+      bodyParts.push({ geo:new THREE.BoxGeometry(0.3,0.07,0.07), mat:dark, x:x, y:1.0, z:1.78, rz:x>0?-0.4:0.4 });
+      bodyParts.push({ geo:new THREE.ConeGeometry(0.24,0.66,6), mat:dark, x:x*2.5, y:0.15, z:0.15, rz:x>0?-1.25:1.25 });
+      // arm (static within the group — only the jaw animates): group
+      // origin (x*2.1,-0.15,0.7) folded into each part's position.
+      bodyParts.push({ geo:new THREE.CylinderGeometry(0.11,0.14,0.7,10), mat:green, x:x*2.1, y:-0.45, z:0.8, rx:0.5 });
+      for(var ci=0;ci<3;ci++){ bodyParts.push({ geo:new THREE.ConeGeometry(0.05,0.22,5), mat:clawM, x:x*2.1+(ci-1)*0.12, y:-0.83, z:1.0, rx:2.6 }); }
     });
-    for(var ti=0;ti<5;ti++){ var tooth=new THREE.Mesh(new THREE.ConeGeometry(0.06,0.2,5), mat(0xffffff)); tooth.position.set(-0.32+ti*0.16,0.08,2.2); tooth.rotation.x=Math.PI; grp.add(tooth); }
+    for(var ti=0;ti<5;ti++){ bodyParts.push({ geo:new THREE.ConeGeometry(0.06,0.2,5), mat:teethM, x:-0.32+ti*0.16, y:0.08, z:2.2, rx:Math.PI }); }
+    for(var si=0;si<5;si++){ bodyParts.push({ geo:new THREE.ConeGeometry(0.2-si*0.02,0.55-si*0.05,6), mat:spikeM, x:0, y:0.95-si*0.1, z:-0.5-si*0.32, rx:-0.25 }); }
+    grp.add(mergeParts(bodyParts));
     var jaw=new THREE.Group(); jaw.position.set(0,-0.05,1.35); grp.add(jaw);
-    put(jaw, box(0.9,0.15,0.95,belly), 0,-0.12,0.45);
-    put(jaw, box(0.6,0.06,0.6,0xe88aa0,{roughness:0.6}), 0,-0.03,0.45); // tongue
-    for(var tj=0;tj<4;tj++){ var tooth2=new THREE.Mesh(new THREE.ConeGeometry(0.05,0.16,5), mat(0xffffff)); tooth2.position.set(-0.27+tj*0.18,-0.0,0.85); jaw.add(tooth2); }
+    var jawParts=[
+      { geo:new THREE.BoxGeometry(0.9,0.15,0.95), mat:belly, x:0, y:-0.12, z:0.45 },
+      { geo:new THREE.BoxGeometry(0.6,0.06,0.6), mat:tongueM, x:0, y:-0.03, z:0.45 } // tongue
+    ];
+    for(var tj=0;tj<4;tj++){ jawParts.push({ geo:new THREE.ConeGeometry(0.05,0.16,5), mat:teethM, x:-0.27+tj*0.18, y:0, z:0.85 }); }
+    jaw.add(mergeParts(jawParts));
     monsterJaw=jaw;
-    for(var si=0;si<5;si++){ var spike=new THREE.Mesh(new THREE.ConeGeometry(0.2-si*0.02,0.55-si*0.05,6), mat(0x6a3598,{roughness:0.55})); spike.position.set(0,0.95-si*0.1,-0.5-si*0.32); spike.rotation.x=-0.25; grp.add(spike); }
-    var tail=new THREE.Mesh(new THREE.ConeGeometry(0.55,1.2,6), dark); tail.position.set(0,0.15,-2.0); tail.rotation.x=-1.9; tail.scale.z=0.4; grp.add(tail);
     grp.visible=false;
     return grp;
   }
@@ -4448,7 +4918,8 @@ var SceneFX = (function(){
     obj.position.copy(opts.from); obj.visible=false;
     scene.add(obj);
     flights.push({ obj:obj, from:opts.from.clone(), to:opts.to.clone(), t:-(opts.delay||0), dur:opts.dur||1.0,
-      arc:opts.arc!=null?opts.arc:1.6, mode:opts.mode||"arc", spin:!!opts.spin, fade:!!opts.fade, onArrive:opts.onArrive||null });
+      arc:opts.arc!=null?opts.arc:1.6, mode:opts.mode||"arc", spin:!!opts.spin, fade:!!opts.fade, onArrive:opts.onArrive||null,
+      apexPause:opts.apexPause||0, apexScale:opts.apexScale||1.35, baseScale:obj.scale.x, pauseT:0, pauseDone:false });
   }
 
   /* ---------------- particle / ring effects ---------------- */
@@ -4701,51 +5172,6 @@ var SceneFX = (function(){
     var goldRim=new THREE.Mesh(new THREE.TorusGeometry(0.62,0.05,6,20), new THREE.MeshBasicMaterial({ color:0xffc21a })); goldRim.rotation.x=Math.PI/2; g.add(goldRim);
     return g;
   }
-  /* ANIM PASS (5): the set trap's marker — a red bobber with a gold
-     tip floating over the sunken cage, so the set trap stays VISIBLE
-     until it springs. Persistent state, not a one-shot: cleared only
-     when the trap springs, the game ends, or a new game starts. */
-  function makeTrapBuoy(x,z){
-    clearTrapBuoy();
-    var g=new THREE.Group();
-    var top=new THREE.Mesh(new THREE.SphereGeometry(0.17,10,8), mat(0xc23325,{roughness:0.45})); top.scale.y=0.8; top.position.y=0.06; g.add(top);
-    var stem=cyl(0.03,0.03,0.3,0x2a2320,{roughness:0.8},6); stem.position.y=0.24; g.add(stem);
-    var flag=new THREE.Mesh(new THREE.SphereGeometry(0.06,8,6), mat(0xf5a524,{roughness:0.4})); flag.position.y=0.42; g.add(flag);
-    g.position.set(x,0.12,z);
-    scene.add(g); trapBuoy=g;
-  }
-  function clearTrapBuoy(){ if(trapBuoy){ scene.remove(trapBuoy); trapBuoy=null; } }
-  /* BAIT SINGLE-INSTANCE (Jenna, real play: "two copies of the chosen
-     card appear — one at the pier, one at the boat"): the dangling bait
-     card must exist AT MOST once. Its line is added straight to the
-     scene (not via spawnProp), so nothing ever removed it early — a
-     second set, or a trap springing while its dangle was still up
-     (live play has no animBusy gate on the victim's timing), left the
-     old card + line hanging next to the new one. This sweeps any live
-     dangle card AND its line out of the scene and the prop list. */
-  /* BAIT HAND SYNC: hide the dangling card's button in the DOM hand
-     (visibility only — the hand's layout never moves) and restore
-     every other card. Safe on any client: only the setter's own hand
-     contains that exact card id, so on the opponent's screen this is
-     a no-op. */
-  function syncBaitHand(){
-    var row=document.getElementById("handRow"); if(!row) return;
-    var btns=row.querySelectorAll("[data-fish]");
-    for(var bi2=0;bi2<btns.length;bi2++){ btns[bi2].classList.toggle("bait-out", !!baitDangleCard && btns[bi2].getAttribute("data-fish")===baitDangleCard); }
-  }
-  function setBaitDangleCard(id){ baitDangleCard=id||null; syncBaitHand(); }
-  function clearBaitDangle(){
-    baitDangleGen++; // invalidate any dangle whose spawn is still queued in the spawnProp backlog — it will find its generation stale and remove itself on its first frame (see the bait case in trigger())
-    setBaitDangleCard(null); // the dangle is gone (swept / sprung / superseded) — the hand copy comes back
-    for(var bi=fxProps.length-1;bi>=0;bi--){
-      var bm2=fxProps[bi].mesh;
-      if(bm2 && bm2.userData && bm2.userData.item4==="baitCard"){
-        if(bm2.userData.line){ try{ scene.remove(bm2.userData.line); }catch(e){} }
-        try{ scene.remove(bm2); }catch(e){}
-        fxProps.splice(bi,1);
-      }
-    }
-  }
   function makeMirrorProp(){
     var g=new THREE.Group();
     var frame=new THREE.Mesh(new THREE.TorusGeometry(0.62,0.07,8,24), mat(0x2fa3b8,{roughness:0.3,metalness:0.5})); frame.scale.y=1.3; g.add(frame);
@@ -4815,15 +5241,23 @@ var SceneFX = (function(){
        instead of being painted over by it. tick() also aims the strike
        at open water just off the target now (see the storm case), out
        from behind the hull. */
+    /* DRAW-CALL FIX (Nov 11 2026): the bolt was ~26-30 separate meshes
+       (halo + core box per zigzag segment, doubled for the crossed
+       twin, plus tip glow/core) — ~26-30 draw calls on every strike.
+       The segments never move independently (tick() only toggles
+       boltMesh.visible / position, and rebuildBolt() swaps the whole
+       variant), so one half's segments + tips merge by material into
+       ONE mesh (2 material groups = 2 calls) and the crossed twin is
+       a clone of it rotated 90° — 2 meshes, 4 calls total, same
+       zigzag, same forks, same tips, same renderOrder 20. */
     var g=new THREE.Group(); var bm=new THREE.MeshBasicMaterial({ color:0xfffbe8, transparent:true, opacity:0.98, depthWrite:false });
     var halo=new THREE.MeshBasicMaterial({ color:0xffe98a, transparent:true, opacity:0.38, depthWrite:false });
-    var half=new THREE.Group();
+    var boltParts=[];
     function boltSeg(x1,y1,x2,y2,coreW,haloW){
       var dx=x2-x1, dy=y2-y1, len=Math.sqrt(dx*dx+dy*dy);
-      var hseg=new THREE.Mesh(new THREE.BoxGeometry(haloW,len+0.3,haloW), halo);
-      hseg.position.set((x1+x2)/2,(y1+y2)/2,0); hseg.rotation.z=Math.atan2(dx,-dy); half.add(hseg);
-      var seg=new THREE.Mesh(new THREE.BoxGeometry(coreW,len+0.2,coreW), bm);
-      seg.position.set((x1+x2)/2,(y1+y2)/2,0); seg.rotation.z=Math.atan2(dx,-dy); half.add(seg);
+      var rz=Math.atan2(dx,-dy);
+      boltParts.push({ geo:new THREE.BoxGeometry(haloW,len+0.3,haloW), mat:halo, x:(x1+x2)/2, y:(y1+y2)/2, z:0, rz:rz });
+      boltParts.push({ geo:new THREE.BoxGeometry(coreW,len+0.2,coreW), mat:bm, x:(x1+x2)/2, y:(y1+y2)/2, z:0, rz:rz });
     }
     var BOLT_VARIANTS=[
       { pts:[[0,0],[0.55,-1.7],[-0.3,-3.2],[0.45,-4.8],[-0.05,-6.5]],
@@ -4837,11 +5271,12 @@ var SceneFX = (function(){
     var pts=bv.pts;
     for(var i=0;i<pts.length-1;i++) boltSeg(pts[i][0],pts[i][1],pts[i+1][0],pts[i+1][1],0.62,1.3);
     for(var fi=0;fi<bv.forks.length;fi++) boltSeg(bv.forks[fi][0],bv.forks[fi][1],bv.forks[fi][2],bv.forks[fi][3],0.38,0.8);
+    var tipX=pts[pts.length-1][0];
+    boltParts.push({ geo:new THREE.SphereGeometry(0.78,10,8), mat:halo, x:tipX, y:-6.5, z:0 });
+    boltParts.push({ geo:new THREE.SphereGeometry(0.3,10,8), mat:bm, x:tipX, y:-6.5, z:0 });
+    var half=mergeParts(boltParts);
     g.add(half);
     var half2=half.clone(); half2.rotation.y=Math.PI/2; g.add(half2); // the crossed twin: same zigzag in the ZY plane
-    var tipX=pts[pts.length-1][0];
-    var tipGlow=new THREE.Mesh(new THREE.SphereGeometry(0.78,10,8), halo); tipGlow.position.set(tipX,-6.5,0); g.add(tipGlow);
-    var tipCore=new THREE.Mesh(new THREE.SphereGeometry(0.3,10,8), bm); tipCore.position.set(tipX,-6.5,0); g.add(tipCore);
     g.traverse(function(ch){ ch.renderOrder=20; }); // draw after the cloud/rain transparents, never painted over by them
     g.visible=false; return g;
   }
@@ -5260,7 +5695,7 @@ var SceneFX = (function(){
     })();
     // NEW ITEM 1 (2026-11-08): the stray third bobber is gone — it
     // floated in the whirlpool with no line. Only the two angler
-    // line bobbers remain, plus the red trap buoy while a trap is set.
+    // line bobbers remain.
     // foam at the banks: the same 44 soft shoreline blobs (same seeds,
     // same spots) MERGED into a single geometry — 1 draw call instead
     // of 44
@@ -5270,7 +5705,7 @@ var SceneFX = (function(){
         var ba2=rnd(bfi*37+5)*Math.PI*2, br2=16.85+rnd(bfi*41)*0.55;
         geos.push(xformGeo(new THREE.SphereGeometry(0.1+rnd(bfi*43)*0.17,7,6), Math.cos(ba2)*br2, 0.045, Math.sin(ba2)*br2, 0,0,0, 1,0.4,1));
       }
-      var bankFoam=new THREE.Mesh(mergeGeos(geos), new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.5 }));
+      bankFoam=new THREE.Mesh(mergeGeos(geos), new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.5 }));
       bankFoam.castShadow=false; scene.add(bankFoam);
     })();
     /* PHASE 2 instanced life — three InstancedMeshes, 1 draw call EACH,
@@ -6142,7 +6577,7 @@ var SceneFX = (function(){
     /* ITEM 4 (Shark Bite): the old fin cone is gone - replaced by the full shark (see the shark builder above the switch), not kept alongside. */
     boltMesh=makeBolt(); scene.add(boltMesh);
     /* ----- extra pond life: a sunning turtle on a log, a heron in the shallows ----- */
-    var logGrp=new THREE.Group();
+    logGrp=new THREE.Group();
     var logM=put(logGrp, cyl(0.32,0.36,3.4,0x7a5230,{roughness:1}), 0,0.05,0); logM.rotation.z=Math.PI/2;
     put(logGrp, cyl(0.3,0.3,0.06,0xc9a06a,{roughness:1}), -1.72,0.05,0).rotation.z=Math.PI/2;
     put(logGrp, cyl(0.34,0.34,0.06,0xc9a06a,{roughness:1}), 1.72,0.05,0).rotation.z=Math.PI/2;
@@ -6152,7 +6587,7 @@ var SceneFX = (function(){
     [[-0.25,0.25],[0.25,0.25],[-0.25,-0.25],[0.25,-0.25]].forEach(function(pp){ put(turtle, box(0.16,0.07,0.12,0x6a9a4e,{roughness:0.7}), pp[0],-0.1,pp[1]); });
     turtle.position.set(-0.5,0.42,0); turtle.rotation.y=0.5; logGrp.add(turtle);
     logGrp.position.set(-11.5,0.1,4.5); logGrp.rotation.y=0.7; scene.add(logGrp);
-    var heron=new THREE.Group(); var hGrey=mat(0xb9c4cc,{roughness:0.7}), hWhite=mat(0xf2f5f6,{roughness:0.7});
+    heron=new THREE.Group(); var hGrey=mat(0xb9c4cc,{roughness:0.7}), hWhite=mat(0xf2f5f6,{roughness:0.7});
     var hBody=new THREE.Mesh(new THREE.SphereGeometry(0.34,10,8), hGrey); hBody.scale.set(1.25,0.85,0.8); hBody.position.y=1.05; hBody.castShadow=true; heron.add(hBody);
     put(heron, cyl(0.035,0.045,0.62,hWhite), 0.42,1.42,0).rotation.z=-0.5;
     put(heron, new THREE.Mesh(new THREE.SphereGeometry(0.15,8,6), hWhite), 0.6,1.78,0);
@@ -6172,14 +6607,28 @@ var SceneFX = (function(){
     for(var si=0;si<120;si++) splashVel.push(new THREE.Vector3());
     burstPts=makePoints(120,0xffd98a,0.32);
     for(var bi3=0;bi3<120;bi3++) burstVel.push(new THREE.Vector3());
-    confetti=new THREE.Group(); confetti.visible=false; scene.add(confetti);
+    /* DRAW-CALL FIX (Nov 11 2026): the win confetti was 80 separate
+       meshes (80 draw calls for 4.6s on every win — enough on its own
+       to push a busy guest tab over the 800 guardrail). The pieces only
+       ever fall and tumble, each at its own fixed rate, so they become
+       ONE InstancedMesh (1 call) with per-instance colours (the 6
+       confetti colours via setColorAt, same pattern as ambMesh /
+       poolMesh): the tick rewrites the 80 instance matrices per frame
+       exactly as it used to move the 80 meshes. Same pieces, same
+       colours, same fall, same tumble. frustumCulled=false: the
+       instances span the whole pond. Instances park below the pond
+       until the first win. */
+    confetti=new THREE.InstancedMesh(new THREE.BoxGeometry(0.16,0.24,0.02), new THREE.MeshBasicMaterial({ color:0xffffff, side:THREE.DoubleSide }), 80);
+    confetti.visible=false; confetti.frustumCulled=false; scene.add(confetti);
     var confCols=[0xf5a524,0x1d9e7a,0xc23325,0x2e7d9e,0xfdf8ec,0xad3a68];
+    var _cd0=dmObj();
     for(var cfi=0;cfi<80;cfi++){
-      var cp=box(0.16,0.24,0.02, confCols[cfi%confCols.length], {roughness:0.6});
-      cp.material=new THREE.MeshBasicMaterial({ color:confCols[cfi%confCols.length], side:THREE.DoubleSide });
-      confetti.add(cp);
-      confettiData.push({ mesh:cp, x:(rnd(cfi*131)-0.5)*17, z:(rnd(cfi*137)-0.5)*17, y:6+rnd(cfi*139)*6, fall:1.1+rnd(cfi*149)*1.3, rx:rnd(cfi*151)*3, rz:rnd(cfi*157)*3, ph:rnd(cfi*163)*6.28 });
+      confetti.setColorAt(cfi, new THREE.Color(confCols[cfi%confCols.length]));
+      confettiData.push({ x:(rnd(cfi*131)-0.5)*17, z:(rnd(cfi*137)-0.5)*17, y:6+rnd(cfi*139)*6, fall:1.1+rnd(cfi*149)*1.3, rx:rnd(cfi*151)*3, rz:rnd(cfi*157)*3, ph:rnd(cfi*163)*6.28, rotX:0, rotZ:0 });
+      _cd0.position.set(0,-10,0); _cd0.rotation.set(0,0,0); _cd0.scale.setScalar(1); _cd0.updateMatrix(); confetti.setMatrixAt(cfi,_cd0.matrix);
     }
+    if(confetti.instanceColor) confetti.instanceColor.needsUpdate=true;
+    confetti.instanceMatrix.needsUpdate=true;
     /* ----- FOUNDATION PASS: baked contact shadows -----
        Every static shadow oval (under each tree in both lines, each
        rock pair, the turtle log, and a slab under the pier) is baked
@@ -6369,6 +6818,64 @@ var SceneFX = (function(){
     return tt+dt;
   }
   var whirlAngle=0, goldieAngle=0, goldieR=6.4, stormSplashAt=0, goldieWakeAt=0, lastTickT=0;
+  /* DRAW-CALL GUARD helpers (Nov 11 2026, fix-drawcalls) — design in
+     the dcPeak/dcLevel comment above. Tier objects are ambient /
+     dressing only; no other game logic ever hides them, so restoring
+     them to visible=true is always safe. */
+  function dcTier1Objs(){
+    var a=[];
+    dragonflies.forEach(function(d){ a.push(d); });
+    schoolFish.forEach(function(s){ a.push(s.grp); });
+    clouds.forEach(function(c){ a.push(c); });
+    if(fireflyPts) a.push(fireflyPts);
+    if(sparklePts) a.push(sparklePts);
+    if(bubbleMesh) a.push(bubbleMesh);
+    if(ambMesh) a.push(ambMesh);
+    return a;
+  }
+  function dcTier2Objs(){
+    var a=[];
+    if(heron) a.push(heron);
+    if(logGrp) a.push(logGrp);
+    debris.forEach(function(d){ a.push(d); });
+    ripples.forEach(function(r){ a.push(r); });
+    waves.forEach(function(w){ a.push(w); });
+    if(lapFoamMesh) a.push(lapFoamMesh);
+    if(bankFoam) a.push(bankFoam);
+    return a;
+  }
+  function dcSetTier(objs, show){ objs.forEach(function(o){ if(o) o.visible=show; }); }
+  function dcApplyLevel(level){
+    dcLevel=level;
+    dcSetTier(dcTier1Objs(), level<1);
+    dcSetTier(dcTier2Objs(), level<2);
+  }
+  function dcHiddenNames(){
+    var n=[];
+    if(dcLevel>=1) n.push("ambient-life");
+    if(dcLevel>=2) n.push("pond-dressing");
+    return n;
+  }
+  function dcRestoreAll(){ dcPeak=0; dcCalmMs=0; dcLastGuardMs=0; dcApplyLevel(0); }
+  function dcGuard(calls){
+    /* WALL-CLOCK RESTORE (fix-render, item 7): the old 90-frame calm
+       count assumed 60fps (~1.5s) but took >200s at VM frame rates and
+       would take 3s on a 30Hz phone / 0.75s at 120Hz. Calm is now
+       elapsed wall-clock time via performance.now(): dcCalmMs accumulates
+       the wall time between guard calls while calls stay under
+       DC_RECOVER, and resets the moment a sample is at/above it, so a
+       level restores only after a continuous 1500ms calm period. */
+    var _now=performance.now();
+    var _dtMs=dcLastGuardMs ? (_now-dcLastGuardMs) : 0;
+    dcLastGuardMs=_now;
+    if(calls>=DC_L2 && dcLevel<2){ dcApplyLevel(2); dcCalmMs=0; return; }
+    if(calls>=DC_L1 && dcLevel<1){ dcApplyLevel(1); dcCalmMs=0; return; }
+    if(calls<DC_RECOVER && dcLevel>0){
+      dcCalmMs+=_dtMs;
+      if(dcCalmMs>=DC_CALM_MS){ dcApplyLevel(dcLevel-1); dcCalmMs=0; }
+    } else if(calls>=DC_RECOVER){ dcCalmMs=0; }
+  }
+
   function tick(){
     requestAnimationFrame(tick);
     if(!renderer || failed) return;
@@ -6437,9 +6944,6 @@ var SceneFX = (function(){
     // material/transform only, no per-frame vertex work
     if(foamPlane){ foamPlane.rotation.z=-t*0.10; foamPlane.material.opacity=0.9+0.06*Math.sin(t*0.8); var fs=1+0.012*Math.sin(t*0.5); foamPlane.scale.set(fs,fs,1); }
     /* NEW ITEM 1: centre-bobber tick removed with the bobber. */
-    // ANIM PASS (5): the set bait trap's marker buoy bobs on the swell
-    // over the sunken cage until the trap springs.
-    if(trapBuoy){ trapBuoy.position.y=0.12+Math.sin(t*2.3)*0.05+waveHeightAt(trapBuoy.position.x,trapBuoy.position.z,t)*0.5; trapBuoy.rotation.y=t*0.9; }
     // CORRECTION: the Phase 2 flow-layer scrolling is deleted with the
     // layers themselves — nothing scrolls a streak texture any more.
     // PHASE 2: lapping foam breathes (one merged mesh, opacity + a
@@ -6717,6 +7221,23 @@ var SceneFX = (function(){
       if(fl.t<0){ fl.obj.visible=false; continue; }
       fl.obj.visible=true;
       var fk3=fl.t/fl.dur;
+      /* BAIT APEX PAUSE (fix-render, item 8): a flight with apexPause
+         holds at the top of its arc (fk3=0.5) for apexPause seconds of
+         game time, scaled up (apexScale x base) and facing the camera
+         (lookAt, as the "rise" hover does), so the card face is legible
+         in a still before the card lands. Only the Bait & Switch taken
+         card uses it. The pause is game-time, like every authored FX
+         duration here, so it is 300ms on any real display. */
+      if(fl.apexPause && !fl.pauseDone && fk3>=0.5){
+        fl.pauseT=(fl.pauseT||0)+dt;
+        fl.t=fl.dur*0.5;
+        fl.obj.position.lerpVectors(fl.from,fl.to,0.5);
+        fl.obj.position.y+=fl.arc;
+        fl.obj.lookAt(camera.position);
+        fl.obj.scale.setScalar(fl.baseScale*(fl.apexScale||1.35));
+        if(fl.pauseT>=fl.apexPause){ fl.pauseDone=true; fl.obj.scale.setScalar(fl.baseScale); }
+        continue;
+      }
       if(fk3>=1){
         var cb=fl.onArrive; scene.remove(fl.obj); flights.splice(fli,1);
         if(cb) try{ cb(); }catch(e){}
@@ -6741,12 +7262,16 @@ var SceneFX = (function(){
     // win confetti over the pond
     if(confettiT<4.6){
       confettiT+=dt; confetti.visible=true;
-      confettiData.forEach(function(cd){
+      var _cd2=dmObj();
+      confettiData.forEach(function(cd,ci){
         cd.y-=cd.fall*dt;
         if(cd.y<0.15){ cd.y=7+rnd(cd.ph*91)*4; }
-        cd.mesh.position.set(cd.x+Math.sin(t*2+cd.ph)*0.4, cd.y, cd.z);
-        cd.mesh.rotation.x+=cd.rx*dt; cd.mesh.rotation.z+=cd.rz*dt;
+        cd.rotX+=cd.rx*dt; cd.rotZ+=cd.rz*dt;
+        _cd2.position.set(cd.x+Math.sin(t*2+cd.ph)*0.4, cd.y, cd.z);
+        _cd2.rotation.set(cd.rotX,0,cd.rotZ); _cd2.scale.setScalar(1); _cd2.updateMatrix();
+        confetti.setMatrixAt(ci,_cd2.matrix);
       });
+      confetti.instanceMatrix.needsUpdate=true;
       if(confettiT>=4.6) confetti.visible=false;
     }
     // anglers
@@ -6776,7 +7301,13 @@ var SceneFX = (function(){
     phi=Math.max(0.12, Math.min(1.45, phi));
     camera.position.set(r*Math.sin(phi)*Math.sin(theta), r*Math.cos(phi), r*Math.sin(phi)*Math.cos(theta));
     camera.lookAt(0, P.tgt[1], P.tgt[2]*sgn);
-    try{ renderer.render(scene,camera); window.__gfInfo={ calls:renderer.info.render.calls, triangles:renderer.info.render.triangles }; }
+    /* DRAW-CALL GUARD (fix-drawcalls): read the count AFTER every
+       render and enforce the <800 guardrail before the NEXT frame —
+       the guard can only hide tier objects, so the worst next-frame
+       addition (one FX, ~25 calls post-merge) still lands under 800.
+       __gfInfo reports the count every frame so the harness (and any
+       future diagnostics) can sample it live. */
+    try{ renderer.render(scene,camera); var _dcc=renderer.info.render.calls; dcLastCalls=_dcc; if(_dcc>dcPeak) dcPeak=_dcc; dcGuard(_dcc); window.__gfInfo={ calls:_dcc, triangles:renderer.info.render.triangles, dcPeak:dcPeak, dcLevel:dcLevel, dcHidden:dcHiddenNames() }; }
     catch(e){ // a render failure must never leave a blank white box
       failed=true; showFallback();
     }
@@ -6791,13 +7322,9 @@ var SceneFX = (function(){
      haunted the sense shots, the anchor left on the pier. Clearing
      them here costs nothing in live play (events are >=5s apart and
      every one-shot effect is <=~4.5s), and it guarantees no prop
-     from an old event can bleed into a new one. The bait buoy is
-     persistent state, not a one-shot — cleared only when the trap
-     springs, the game ends, or a new game starts. */
+     from an old event can bleed into a new one. */
   function clearOneShotFx(){
     var i;
-    baitDangleGen++; // a queued bait dangle from the old game must not spawn into the new one (see clearBaitDangle)
-    setBaitDangleCard(null); // a new game restores the hand copy too — no card stays hidden across games
     timers.length=0; // REMATCH SWEEP 3: pending later() beats belong to the OLD game (a Goldie fetch flight at +2.35s, a storm redraw cast at +2.95s, end-theatre bursts) — left queued, they would fire INTO the new game and put the finished game's cards/splashes over the fresh pond. The start case schedules its own beats only after this sweep runs (see trigger), so clearing here costs the new game nothing.
     for(i=fxProps.length-1;i>=0;i--){ try{ scene.remove(fxProps[i].mesh); }catch(e){} if(fxProps[i].mesh && fxProps[i].mesh.userData && fxProps[i].mesh.userData.line){ try{ scene.remove(fxProps[i].mesh.userData.line); }catch(e){} } }
     fxProps.length=0;
@@ -6967,25 +7494,29 @@ var SceneFX = (function(){
   function makeStormCloudProp(){
     // Storm Surge: a dark storm cloud - a cluster of dark-grey spheres,
     // same technique as the fog blobs, from the existing primitives.
+    /* DRAW-CALL FIX (Nov 11 2026): the cloud was 12 separate meshes
+       (12 calls per storm). The spheres never move independently (the
+       prop fn scales / bobs the whole group and fades its materials),
+       so they merge by SHARED material into ONE mesh (5 material
+       groups = 5 calls). Same spheres, same colours, same positions
+       and squash — mergeParts bakes each sphere's transform. */
     var g=new THREE.Group();
     var cols=[0x59616e,0x646c7c,0x4a5058,0x59616e]; // STORM FRAME PASS: lifted a step lighter again — the near-black palette vanished against the dark tree line behind the boat; this slate reads against trees AND sky, and the pale lit underside row in the builder finishes the read
+    var greyMats=cols.map(function(c){ return new THREE.MeshBasicMaterial({ color:c, transparent:true, opacity:0.97, depthWrite:false }); });
+    var paleMat=new THREE.MeshBasicMaterial({ color:0xaebfd8, transparent:true, opacity:0.95, depthWrite:false });
+    var cloudParts=[];
     for(var i=0;i<9;i++){
       var r=1.15+rnd(i*7)*0.75;
-      var s=new THREE.Mesh(new THREE.SphereGeometry(r,10,8), new THREE.MeshBasicMaterial({ color:cols[i%4], transparent:true, opacity:0.97, depthWrite:false }));
-      s.position.set((rnd(i*13)-0.5)*5.8, (rnd(i*17)-0.5)*1.0, (rnd(i*19)-0.5)*2.4);
-      s.scale.y=0.62;
-      g.add(s);
+      cloudParts.push({ geo:new THREE.SphereGeometry(r,10,8), mat:greyMats[i%4], x:(rnd(i*13)-0.5)*5.8, y:(rnd(i*17)-0.5)*1.0, z:(rnd(i*19)-0.5)*2.4, sy:0.62 });
     }
     /* LIT UNDERSIDE: three pale blue-grey puffs along the cloud's
        belly — the bright edge the eye catches against the dark hull
        and tree line, so the cloud reads as a storm cloud over the
        boat even in the top band of a phone screen. */
     for(var j=0;j<3;j++){
-      var u=new THREE.Mesh(new THREE.SphereGeometry(0.95,10,8), new THREE.MeshBasicMaterial({ color:0xaebfd8, transparent:true, opacity:0.95, depthWrite:false }));
-      u.position.set((j-1)*1.9, -0.62, 0.3);
-      u.scale.y=0.5;
-      g.add(u);
+      cloudParts.push({ geo:new THREE.SphereGeometry(0.95,10,8), mat:paleMat, x:(j-1)*1.9, y:-0.62, z:0.3, sy:0.5 });
     }
+    g.add(mergeParts(cloudParts));
     g.userData.item4="cloud"; // probe tag: which prop this is
     return g;
   }
@@ -7069,15 +7600,28 @@ var SceneFX = (function(){
   }
   function makeRainProp(){
     // Storm Surge: a sheet of rain streaks over one angler.
-    var g=new THREE.Group();
+    /* DRAW-CALL FIX (Nov 11 2026): the rain was 34 separate meshes
+       sharing ONE material (34 calls per storm — the single biggest
+       storm cost). The streaks only ever move straight down, each at
+       its own fixed phase, so they become ONE InstancedMesh (1 call):
+       the storm fn rewrites the 34 instance matrices per frame exactly
+       as it used to move the 34 children, and the shared material
+       fades as one — which it already did, since all 34 children
+       shared that material instance. Same streaks, same positions,
+       same fall, same fade. frustumCulled=false: the instances span
+       the whole sheet, so the base geometry's bounds must not cull it
+       (same treatment as bubbleMesh/ambMesh/poolMesh). */
     var rm=new THREE.MeshBasicMaterial({ color:0xeaf7ff, transparent:true, opacity:0.95, depthWrite:false });
+    var g=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.08,0.08,1.3,5), rm, 34);
+    var D=dmObj(); var offs=[], xs=[], zs=[];
     for(var i=0;i<34;i++){
-      var s=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,1.3,5), rm);
-      s.position.set((rnd(i*7)-0.5)*5.4, 4, (rnd(i*11)-0.5)*3.6);
-      s.userData.off=rnd(i*13);
-      g.add(s);
+      var rx=(rnd(i*7)-0.5)*5.4, rz=(rnd(i*11)-0.5)*3.6;
+      xs.push(rx); zs.push(rz); offs.push(rnd(i*13));
+      D.position.set(rx,4,rz); D.rotation.set(0,0,0); D.scale.setScalar(1); D.updateMatrix(); g.setMatrixAt(i,D.matrix);
     }
     g.userData.item4="rain";
+    g.userData.offs=offs; g.userData.xs=xs; g.userData.zs=zs;
+    g.frustumCulled=false;
     return g;
   }
   function makeGoldieProp(){
@@ -7170,7 +7714,6 @@ var SceneFX = (function(){
     // Only already-finished effects are swept; a new game is the one clean
     // slate where a full sweep is safe (no live FX to protect).
     if(ev.kind==="start"){ clearOneShotFx(); } else { clearExpiredFx(); }
-    if(ev.kind==="start") clearTrapBuoy();
     var A = ev.actor==="you" ? viewerAngler() : otherAngler();
     var O = ev.actor==="you" ? otherAngler() : viewerAngler();
     if(!A) return;
@@ -7206,150 +7749,21 @@ var SceneFX = (function(){
         startCast(A,{ tex:drawnTex });
         break;
       case "bait":
-        if(ev.askText){
-          // The trap SPRINGS: the buoy pops, the bait card snaps up out
-          // of the water spinning, and the FORCED ask resolves - its
-          // card flies face-up on a slow, clearly visible arc (or the
-          // victim casts, on a miss).
-          clearTrapBuoy();
-          clearBaitDangle(); // SINGLE-INSTANCE: if the set dangle is somehow still up (live timing), it dies before the snap card pops — never two copies of the card
-          var trapBase=A.position.clone().add(new THREE.Vector3(0,0.1, A.position.z>0 ? -3.1 : 3.1)); // same 3.1 spot the dangle hung over and the buoy marks
-          doSplashAt(trapBase.x,trapBase.z,true);
-          spawnRing(new THREE.Vector3(trapBase.x,0.06,trapBase.z),0xffcf4d,4.2);
-          var snapCard=makeCardObj(backTex);
-          spawnProp(snapCard,1.1,function(k,m){ m.position.copy(trapBase); m.position.y=trapBase.y+Math.sin(Math.min(k*1.4,1)*Math.PI)*1.6; m.rotation.y=k*4.2; });
-          later(0.6,function(){
-            if(ev.drew || ev.drawnCard) startCast(A,{ tex:drawnTex });
-            else flyCard({ from:oPos, to:aPos, tex: frontForYou&&ev.mateId ? frontTexFor(ev.mateId) : backTex, dur:1.4, arc:1.9 });
-          });
-          react(O,"wow",0.8);
-        } else {
-          // REWORK (Jenna): setting the trap - NO bait box. Your chosen
-          // card itself dangles on the line over the water in front of
-          // the foe, and it must be CLEARLY visible: full flight size
-          // (the old 1.9 shrink is gone), FACE showing — the trap is
-          // announced in the open, both players are told exactly which
-          // card it is — hung high on a thick pale line from your hand,
-          // swinging and slowly turning so the face reads.
-          // DANGLE TIMING (Jenna, real play: "the card dangles but
-          // I never saw the two dips"): DIAGNOSIS — the dips were
-          // placed inside a 3.0 game-second dangle on the old
-          // frame-locked clock, which advanced 1/60s per RENDERED
-          // frame: on her 120Hz phone the whole dangle lasted ~1.5
-          // wall-seconds and both dips flashed past in ~1.1s while
-          // she was still reading the strip. The FX clock is now
-          // real time (see tick), and the show is lengthened into
-          // the window that always plays.
-          // FIX ROUND 7 (Jenna, live v19 verification: "two dips NOT
-          // observed — in 5 firings the card's lower half never went
-          // under the water; at 2.0s the card was tilted with a splash
-          // at the fishing line's red bobber, but the card itself
-          // stayed dry and above the water"): TWO root causes found.
-          // (1) THE SPOT WAS ON THE BOAT, not over open water: 3.1
-          // units off the boat angler lands at z≈-4.27, which is
-          // exactly ON the scaled hull's centre-facing side line
-          // (overBoat() agrees — that point tests as over the hull),
-          // so the descending card slid down/behind the hull side
-          // instead of entering water, and every dip splash — fired
-          // at that same over-hull point — was RELOCATED by
-          // doSplashAt's deck-avoidance walk toward the pond centre,
-          // which is why the splash appeared at the bobber, away
-          // from the card. The spot below now walks toward the pond
-          // centre until overDeck() is false, plus one extra step of
-          // clearance — genuine open water for BOTH foes (the pier
-          // spot at 3.1 off was already open and does not move).
-          // (2) THE DIP PROFILE PEAKED FOR AN INSTANT: a pure sine
-          // dip touches full depth for a single frame, so frame
-          // captures between peaks showed a dry card. The dips are
-          // now TRAPEZOIDS — descend, HOLD fully submerged, rise —
-          // inside a longer 4.6 real-second dangle: DIP 1 at
-          // 0.64–1.93s (lower half under ~0.84–1.74s, at full depth
-          // ~1.03–1.55s), DIP 2 at 2.48–3.77s (lower half under
-          // ~2.68–3.58s, at full depth ~2.87–3.39s), buoy at ~4.1s.
-          // Depth is 3.9
-          // from the 2.75 hang: the card (half-height 1.575 at its
-          // 2.5x flight scale) centres at y≈-1.15 at full dip, so
-          // its lower half — in fact everything but the top ~0.4 —
-          // is below the y≈0 water line for the whole hold. Every
-          // splash + ring fires at the CARD's own current x,z
-          // (m.position), never at a precomputed spot, so the splash
-          // is on the card itself, at both dips. The turn gates hold
-          // the spring until the dangle finishes (see baitDangling()
-          // in the UI gates), so the dips cannot be cut short.
-          /* SINGLE-INSTANCE + OPEN WATER (Jenna, real play: "two copies
-             of the chosen card" + "it never dips"): any earlier dangle
-             (card + line) is swept first, so this card is the ONLY one;
-             and the spot starts 3.1 units off the foe, then walks to
-             genuine open water (see FIX ROUND 7 above) where a dip can
-             actually be seen instead of sliding down the boat's side. */
-          var trapSpot=O.position.clone().add(new THREE.Vector3(0,0, O.position.z>0 ? -3.1 : 3.1));
-          var trapGuard=0;
-          while(overDeck(trapSpot.x,trapSpot.z) && trapGuard<24){ var td=Math.sqrt(trapSpot.x*trapSpot.x+trapSpot.z*trapSpot.z)||1; trapSpot.x-=trapSpot.x/td*0.35; trapSpot.z-=trapSpot.z/td*0.35; trapGuard++; }
-          if(trapGuard>0){ var td2=Math.sqrt(trapSpot.x*trapSpot.x+trapSpot.z*trapSpot.z)||1; trapSpot.x-=trapSpot.x/td2*0.35; trapSpot.z-=trapSpot.z/td2*0.35; } // one extra step past the hull side / deck edge, so the card and its splashes sit in open water, not on the boundary (splashes on the boundary get relocated by doSplashAt — the v19 "splash at the bobber" tell)
-          clearBaitDangle();
-          clearTrapBuoy();
-          var baitChosenId = ev.mateId ? (ev.mateId.slice(0,-1) + mateSuitOf(ev.mateId.slice(-1))) : null; // the setter's chosen card itself (ev.mateId names its mate)
-          setBaitDangleCard(baitChosenId); // HAND SYNC: the chosen card leaves the setter's visible hand for the whole dangle — the dangling card is the only copy on screen
-          var baitTex = ev.mateId ? frontTexFor(ev.mateId.slice(0,-1) + mateSuitOf(ev.mateId.slice(-1))) : backTex; // the dangling card is the setter's chosen card = the mate of the rigged ask target
-          var baitCard=makeCardObj(baitTex); baitCard.userData.item4="baitCard";
-          baitCard.userData.baitGen=baitDangleGen; // SINGLE-INSTANCE GEN GUARD: clearBaitDangle() above bumped the generation; if a LATER set/spring/new-game bumps it again before this (possibly backlog-deferred) prop first runs, the prop removes itself below instead of becoming a second copy
-          var baitLine=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,1,6), new THREE.MeshBasicMaterial({ color:0xfff0b3 }));
-          baitLine.castShadow=false; scene.add(baitLine);
-          baitCard.userData.line=baitLine; // so clearBaitDangle / clearOneShotFx can sweep the line with the card
-          var hangPos=new THREE.Vector3(trapSpot.x, 2.75, trapSpot.z);
-          /* FIX ROUND 7 dip profile: a trapezoid, not a sine — descend
-             over the first 30% of the dip window, HOLD at full depth
-             for the middle 40% (~0.52s per dip, with the lower half
-             under for ~0.9s per dip), rise over the last 30%. Full
-             depth is a sustained state, not an instant. */
-          function baitDipDepth(k,a,b){
-            if(k<=a || k>=b) return 0;
-            var u=(k-a)/(b-a);
-            if(u<0.3) return Math.sin((u/0.3)*Math.PI/2);
-            if(u>0.7) return Math.sin(((1-u)/0.3)*Math.PI/2);
-            return 1;
-          }
-          spawnProp(baitCard,4.6,function(k,m){
-            if(m.userData.baitGen!==baitDangleGen){ // superseded before it ever showed — die silently, taking the line with it
-              if(baitLine.parent) scene.remove(baitLine);
-              m.visible=false; return;
-            }
-            if(k<0.08){ var u0=easeOut(k/0.08); m.position.lerpVectors(aPos,hangPos,u0); }
-            else {
-              m.position.copy(hangPos);
-              m.position.y += Math.sin((k-0.08)*Math.PI*2.6)*0.13;
-              /* TWO DIPS (see DANGLE TIMING / FIX ROUND 7 above):
-                 dip 1 at k .14–.42 (0.64–1.93 real-s), dip 2 at
-                 k .54–.82 (2.48–3.77 real-s), centre down 3.9 from
-                 the 2.75 hang to y≈-1.15 at full depth — the card's
-                 half-height is 1.575, so the bottom reaches y≈-2.7
-                 and only the top ~0.4 stays above the y≈0 water
-                 line, HELD there for the middle of each dip. Splash
-                 + ring going in, another at full depth, another
-                 coming out — all at the card itself (below). */
-              m.position.y -= baitDipDepth(k,0.14,0.42)*3.9;
-              m.position.y -= baitDipDepth(k,0.54,0.82)*3.9;
-            }
-            m.rotation.z=Math.sin(k*Math.PI*5)*0.3;
-            m.rotation.y=(seat===0?0:Math.PI)+Math.sin(k*2.4)*0.6; // slow turn around the camera-facing yaw: the face catches the viewer, then the back, then the face again
-            var cardTop=m.position.clone(); cardTop.y+=1.5;
-            setLineSeg(baitLine, aPos, cardTop);
-            /* FIX ROUND 7: every dip splash + ring fires at the CARD's
-               own current position (m.position.x/z — the card hangs
-               directly over that point), so the splash is visibly ON
-               the card as it enters, holds under, and leaves the
-               water — at both dips, at two distinct moments. */
-            if(k>0.155 && !m.userData.dip1In){ m.userData.dip1In=true; doSplashAt(m.position.x,m.position.z,true); spawnRing(new THREE.Vector3(m.position.x,0.06,m.position.z),0xffcf4d,4.4); }
-            if(k>0.28 && !m.userData.dip1Bot){ m.userData.dip1Bot=true; doSplashAt(m.position.x,m.position.z,true); spawnRing(new THREE.Vector3(m.position.x,0.06,m.position.z),0xffcf4d,3.8); }
-            if(k>0.40 && !m.userData.dip1Out){ m.userData.dip1Out=true; doSplashAt(m.position.x,m.position.z,true); spawnRing(new THREE.Vector3(m.position.x,0.06,m.position.z),0xffcf4d,4.4); }
-            if(k>0.555 && !m.userData.dip2In){ m.userData.dip2In=true; doSplashAt(m.position.x,m.position.z,true); spawnRing(new THREE.Vector3(m.position.x,0.06,m.position.z),0xffcf4d,4.4); }
-            if(k>0.68 && !m.userData.dip2Bot){ m.userData.dip2Bot=true; doSplashAt(m.position.x,m.position.z,true); spawnRing(new THREE.Vector3(m.position.x,0.06,m.position.z),0xffcf4d,3.8); }
-            if(k>0.80 && !m.userData.dip2Out){ m.userData.dip2Out=true; doSplashAt(m.position.x,m.position.z,true); spawnRing(new THREE.Vector3(m.position.x,0.06,m.position.z),0xffcf4d,4.4); }
-            if(k>0.90 && !m.userData.buoyed){ m.userData.buoyed=true; makeTrapBuoy(trapSpot.x,trapSpot.z); }
-            if(k>=0.999){ if(baitLine.parent) scene.remove(baitLine); setBaitDangleCard(null); /* the dangle is over — the card is back in the setter's hand (the buoy alone marks the set trap now) */ }
-          });
-          react(A,"happy",0.8); react(O,"wow",0.7);
-        }
+        // BAIT & SWITCH REWORK (v28): a real swap — the offered card flies
+        // face-up from the actor to the opponent, and the taken card flies
+        // face-up from the opponent to the actor, crossing over the pond
+        // centre. Both cards are named in the strip, so the faces match
+        // the words. No trap, no dangle, no rigged ask.
+        if(ev.offeredId) flyCard({ from:aPos, to:oPos, tex: frontTexFor(ev.offeredId), dur:1.1, arc:1.8 });
+        /* ITEM 8 (fix-render): the TAKEN card pauses 0.3s at the apex
+           of its arc, scaled up and facing the camera, so its face is
+           legible in a still. Offered flight unchanged. The landing
+           burst moves 1.2 -> 1.55s to match the new landing time
+           (0.15 delay + 1.1 flight + 0.3 pause); pairFlight at 1.6s
+           still follows the landing. */
+        if(ev.takenId) flyCard({ from:oPos, to:aPos, tex: frontTexFor(ev.takenId), dur:1.1, delay:0.15, arc:1.8, apexPause:0.3 });
+        later(1.55,function(){ doBurst(aPos.clone(),0xffb066); react(A,"happy",0.9); });
+        if(ev.pairId) pairFlight(A,1.6);
         break;
 
       case "fish_wish":
@@ -7471,12 +7885,14 @@ var SceneFX = (function(){
           var pop=easeOut(Math.min(k/0.08,1));
           m.scale.setScalar(Math.max(pop*1.5,0.01));
           m.position.y=4.85+Math.sin(k*Math.PI*2)*0.12;
-          if(k>0.86){ var f=1-(k-0.86)/0.14; m.traverse(function(ch){ if(ch.material) ch.material.opacity=0.97*f; }); }
+          if(k>0.86){ var f=1-(k-0.86)/0.14; m.traverse(function(ch){ if(!ch.material) return; var _cms=Array.isArray(ch.material)?ch.material:[ch.material]; _cms.forEach(function(_cm){ _cm.opacity=0.97*f; }); }); }
         });
         var rainM=makeRainProp(); rainM.position.set(stormC.x,0,stormC.z);
         spawnProp(rainM,STORM_DUR,function(k,m){
-          m.children.forEach(function(s){ s.position.y = 5.5 - ((k*9 + s.userData.off) % 1)*4.9; });
-          if(k>0.9){ var rf=1-(k-0.9)/0.1; m.children.forEach(function(s){ s.material.opacity=0.88*rf; }); }
+          var D=dmObj();
+          for(var ri=0;ri<34;ri++){ D.position.set(m.userData.xs[ri], 5.5 - ((k*9 + m.userData.offs[ri]) % 1)*4.9, m.userData.zs[ri]); D.rotation.set(0,0,0); D.scale.setScalar(1); D.updateMatrix(); m.setMatrixAt(ri,D.matrix); }
+          m.instanceMatrix.needsUpdate=true;
+          if(k>0.9){ var rf=1-(k-0.9)/0.1; m.material.opacity=0.88*rf; }
         });
         later(0.35,function(){ doSplash(true); });
         later(1.8,function(){ doSplashAt(O.position.x+(rnd(31)-0.5)*3,O.position.z+(rnd(47)-0.5)*3,true); });
@@ -7682,12 +8098,12 @@ var SceneFX = (function(){
         break;
 
       case "peek":
-        // ANIM PASS (3): the peeked cards THEMSELVES fan up face-up
-        // above the victim's boat, hold long enough to read, then sink
-        // back into the hand. (Was: gold glints only - the cards were
-        // strip-only.) Your peek: v.you.peeked is the real sample.
-        // Their peek: your own cards fan up above your pier (no leak -
-        // they're yours).
+        // ANIM PASS (3) + v28 Fix 6: the peeked cards THEMSELVES fan up
+        // face-up IN THE CENTRE OF THE POND (like Lucky Lure's display),
+        // hold long enough to read, then sink back. Your peek: v.you.peeked
+        // is the real sample. Their peek: your own cards fan up above the
+        // pond centre (no leak - they're yours). The persistent DOM panel
+        // keeps the result on screen until dismissed.
         // ITEM 4 (Jenna's idea): first the guy pulls out binoculars -
         // they rise to his face and hold ~1s while he looks at the foe -
         // THEN the cards fan up as before. The three gold glints are gone.
@@ -7709,7 +8125,7 @@ var SceneFX = (function(){
           pcard.scale.setScalar(2.7); /* PEEK READABILITY: fanned cards at full flight size (was 1.9) and held ~3.6s, so rank + suit can actually be read across the pond. */
           return pcard;
         });
-        later(1.0,function(){ fanCardsUp(peekObjs,oPos,3.6); });
+        later(1.0,function(){ fanCardsUp(peekObjs,center,3.6); }); /* v28 Fix 6: pond centre, not the victim's boat */
         react(A,"wow",0.9);
         break;
       case "sense":
@@ -7832,7 +8248,7 @@ var SceneFX = (function(){
         // (older / live-server events) fall back to the shield named in
         // the event text ("…shattered on X's Anchor."). Before this,
         // an Anchor block still bounced a Life Ring — the wrong item.
-        var blkBy = ev.blockedBy || (ev.text && ev.text.indexOf("Anchor")>=0 ? "anchor" : "shield");
+        var blkBy = ev.blockedBy || (ev.text && ev.text.indexOf("Anchor")>=0 ? "anchor" : (ev.text && ev.text.indexOf("Fog Bank")>=0 ? "fog" : (ev.text && ev.text.indexOf("Life Ring")>=0 ? "ring" : null)));
         var blkBase=O.position.clone().add(new THREE.Vector3(0,2.75,0));
         if(blkBy==="anchor"){
           /* The blocker IS the visual: a full-size anchor (same scale
@@ -7845,7 +8261,11 @@ var SceneFX = (function(){
             m.rotation.z=Math.sin(k*Math.PI*2)*0.12; m.rotation.y=k*0.8;
             if(k>0.22 && k<0.3 && !m.userData.splashed){ m.userData.splashed=true; doSplashAt(O.position.x*0.7,O.position.z*0.7,false); }
           });
-        } else {
+        } else if(blkBy==="fog"){
+          /* The Fog Bank blocked: the defender's fog IS the shield —
+             puff fog over the defender instead of bouncing a ring. */
+          fogPuff(O);
+        } else if(blkBy==="ring" || blkBy==="shield"){
           /* Same for the Life Ring: the actual red-and-white ring,
              full-size, bouncing the hit off. */
           var blkRing=makeLifeRing(); blkRing.scale.setScalar(1.8);
@@ -7861,16 +8281,40 @@ var SceneFX = (function(){
       case "fog":
         fogPuff(A); // ITEM 4: the white dome flash is gone - the fog stays exactly as-is
         // and a low fog BANK rolls in off the pond and swallows your whole side
+        /* DRAW-CALL FIX (Nov 11 2026): the bank was 7 separate meshes
+           (7 calls). The blobs only ever lerp, grow and fade — and all
+           7 share the same fade (same start, same duration, same
+           formula) — so they become ONE InstancedMesh (1 call): the
+           prop fn rewrites the 7 instance matrices per frame exactly
+           as it used to move/scale the 7 children, and the shared
+           material fades as one. Same blobs, same paths, same growth,
+           same fade. (fogPuff's 10 blobs stay separate meshes: their
+           tick-driven fades are staggered per blob, so they cannot
+           share one material's opacity.) frustumCulled=false, as with
+           the rain above. */
+        var fogBank=new THREE.InstancedMesh(new THREE.SphereGeometry(1,8,6), new THREE.MeshBasicMaterial({ color:0xeef6f8, transparent:true, opacity:0.34, depthWrite:false }), 7);
+        var _fbStarts=[], _fbEnds=[], _fbRadii=[];
         for(var fbi=0;fbi<7;fbi++){
-          (function(ii){
-            var fm=new THREE.Mesh(new THREE.SphereGeometry(0.85+rnd(ii*7)*0.55,8,6), new THREE.MeshBasicMaterial({ color:0xeef6f8, transparent:true, opacity:0.34, depthWrite:false }));
-            fm.scale.y=0.55;
-            var fStart=new THREE.Vector3(A.position.x+(rnd(ii*13)-0.5)*3.4, 0.65+rnd(ii*17)*0.7, A.position.z>0 ? 2.5 : -2.5);
-            var fEnd=new THREE.Vector3(A.position.x+(rnd(ii*19)-0.5)*3.0, fStart.y+0.3, A.position.z+(A.position.z>0?-0.6:0.6));
-            fm.position.copy(fStart);
-            spawnProp(fm,2.6,function(k,m){ var fk=Math.max(0,Math.min(k*1.15-ii*0.05,1)); m.position.lerpVectors(fStart,fEnd,fk); m.material.opacity=0.34*(1-k*0.55); m.scale.x=1+k*0.7; m.scale.z=1+k*0.5; });
-          })(fbi);
+          var _fr=0.85+rnd(fbi*7)*0.55;
+          _fbRadii.push(_fr);
+          var _fs=new THREE.Vector3(A.position.x+(rnd(fbi*13)-0.5)*3.4, 0.65+rnd(fbi*17)*0.7, A.position.z>0 ? 2.5 : -2.5);
+          _fbStarts.push(_fs);
+          _fbEnds.push(new THREE.Vector3(A.position.x+(rnd(fbi*19)-0.5)*3.0, _fs.y+0.3, A.position.z+(A.position.z>0?-0.6:0.6)));
         }
+        fogBank.userData.item4="fogbank";
+        fogBank.userData.starts=_fbStarts; fogBank.userData.ends=_fbEnds; fogBank.userData.radii=_fbRadii;
+        fogBank.frustumCulled=false;
+        spawnProp(fogBank,2.6,function(k,m){
+          var D=dmObj();
+          for(var fi2=0;fi2<7;fi2++){
+            var fk=Math.max(0,Math.min(k*1.15-fi2*0.05,1));
+            var _rr=m.userData.radii[fi2];
+            D.position.set(m.userData.starts[fi2].x+(m.userData.ends[fi2].x-m.userData.starts[fi2].x)*fk, m.userData.starts[fi2].y+(m.userData.ends[fi2].y-m.userData.starts[fi2].y)*fk, m.userData.starts[fi2].z+(m.userData.ends[fi2].z-m.userData.starts[fi2].z)*fk);
+            D.rotation.set(0,0,0); D.scale.set(_rr*(1+k*0.7), _rr*0.55, _rr*(1+k*0.5)); D.updateMatrix(); m.setMatrixAt(fi2,D.matrix);
+          }
+          m.instanceMatrix.needsUpdate=true;
+          m.material.opacity=0.34*(1-k*0.55);
+        });
         react(A,"happy",0.7);
         break;
       default:
@@ -7881,7 +8325,6 @@ var SceneFX = (function(){
     // win / lose theatre, once, when the finishing event lands
     if(v && v.phase==="finished" && !endFired){
       endFired=true;
-      clearTrapBuoy();
       var V=viewerAngler(), W=otherAngler();
       if(v.winner==="you"){ confettiT=0; doBurst(handPos(V),0xffd98a); react(V,"celebrate",3.0); react(W,"sad",2.0); }
       else if(v.winner==="opponent"){
@@ -7914,8 +8357,6 @@ var SceneFX = (function(){
     },
     setHold:function(b){ fxHold=!!b; }, // FIX ROUND 4 (1): UI-layer denial gate holds the animation gate while the draw waits
     animBusy:animBusy, // ANIM PASS (8): the UI layer's animation-completion gate
-    baitDangling:function(){ return !!baitDangleCard; }, // BAIT DANGLE: true while a Bait & Switch dangle is live — the turn gates hold the trap's spring until it finishes, so its two dips always play
-    baitDangleCardId:function(){ return baitDangleCard; }, // BAIT HAND SYNC: the card id hidden from the setter's DOM hand while it dangles (render() reads this)
     /* ANIM PASS (8) FIX: hidden diagnostic for the gate — reports every
        term animBusy() reads, so a stuck gate can be traced to the exact
        effect instead of guessed at. Test-mode-style affordance; the
@@ -7926,13 +8367,14 @@ var SceneFX = (function(){
         pierCast:!!(anglers.pier&&anglers.pier.userData.cast), boatCast:!!(anglers.boat&&anglers.boat.userData.cast), hold:fxHold,
         pierDomeT:(anglers.pier?anglers.pier.userData.domeT:null), pierDomeDur:(anglers.pier?anglers.pier.userData.domeDur:null),
         boatDomeT:(anglers.boat?anglers.boat.userData.domeT:null), boatDomeDur:(anglers.boat?anglers.boat.userData.domeDur:null),
-        busy:animBusy(), goldieOrbit:goldieOrbit, luckyHover:luckyHover.length };
+        busy:animBusy(), goldieOrbit:goldieOrbit, luckyHover:luckyHover.length,
+        dc:{ calls:dcLastCalls, peak:dcPeak, level:dcLevel, hidden:dcHiddenNames() } };
     },
     trigger:trigger,
-    /* REMATCH SWEEP: full one-shot slate + trap buoy cleared when a
+    /* REMATCH SWEEP: full one-shot slate cleared when a
        new game starts, so nothing from the finished game (a lingering
-       prop, the set-trap buoy, a mid-flight card) bleeds into it. */
-    resetForNewGame:function(){ if(!inited || failed) return; clearOneShotFx(); clearTrapBuoy(); }
+       prop, a mid-flight card) bleeds into it. */
+    resetForNewGame:function(){ if(!inited || failed) return; dcRestoreAll(); clearOneShotFx(); }
   };
 })();
 </script>
@@ -7945,6 +8387,17 @@ var SceneFX = (function(){
      sandboxed previews it may be refused, and the game plays the same. */
   if("serviceWorker" in navigator){
     try{ navigator.serviceWorker.register("assets/sw.js").then(function(reg){ try{ reg.update(); }catch(e){} }).catch(function(){}); }catch(e){}
+  }
+  /* READINESS (Nov 12, 2026): when a NEW service worker takes control
+     (v28 replacing the cached v27), reload once so the page serves the
+     new build instead of the cached old one. The hadController guard
+     means a first install (no previous controller) never reloads. */
+  if("serviceWorker" in navigator){
+    var swHadController = !!navigator.serviceWorker.controller;
+    var swReloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function(){
+      if(swHadController && !swReloaded){ swReloaded=true; window.location.reload(); }
+    });
   }
   /* Install flow (Add to Home Screen / Install app) */
   var installReady=false;

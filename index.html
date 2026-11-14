@@ -276,6 +276,8 @@
   .modcard .ic{font-size:24px;line-height:1}
   .modcard .nm{font-family:Georgia,serif;font-size:8.5px;font-weight:700;line-height:1.15}
   .modcard.selected{box-shadow:0 0 0 3px var(--accent),0 0 14px rgba(245,165,36,.55)}
+  .modcard.dimmed{opacity:.45;filter:grayscale(.45)} /* v29: a gated modifier (Mate Sense with no mate to sense, Mirror Pond on Reel In) reads as unplayable in the hand — the detail panel still opens on tap and names the reason. */
+  .pcard.magnet-hit{box-shadow:0 0 0 3px #ff6a7a,0 0 14px rgba(255,106,122,.75)} /* v29: SOLO only — Magnet Hook armed, this card's mate is held by the Computer */
   .modcard.useful{animation:modGlow 1.1s ease-in-out infinite}
   @keyframes modGlow{0%,100%{box-shadow:0 0 0 2px rgba(245,165,36,.35),0 1px 3px rgba(12,43,46,.25)}50%{box-shadow:0 0 0 4px rgba(245,165,36,.95),0 0 18px rgba(245,165,36,.85)}}
   @media (prefers-reduced-motion: reduce){ .modcard.useful{animation:none;box-shadow:0 0 0 3px rgba(245,165,36,.9)} }
@@ -341,6 +343,14 @@
     transition:all .25s ease;max-width:92vw;text-align:center;box-shadow:var(--shadow);
   }
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  /* v29 (Rule 5b): CPU modifier callout — names the mod the Computer is
+     about to play, shown 1.35s BEFORE its animation starts. */
+  #cpuModCallout{
+    display:none;position:fixed;left:50%;top:76px;transform:translateX(-50%);z-index:60;
+    background:#3a2403;color:#ffe9c4;border:2px solid #f5a524;border-radius:12px;padding:10px 18px;
+    font-weight:800;font-size:15px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.45);max-width:92vw;
+  }
+  #cpuModCallout.show{display:block}
   /* ---------- Connection status ---------- */
   .conn-status{
     display:inline-flex;align-items:center;gap:7px;margin:10px 0 2px;padding:5px 12px;border-radius:999px;
@@ -663,7 +673,7 @@
       <button class="btn btn-primary btn-block" id="soloBtn">🎣 Play vs the Computer</button>
       <button class="btn btn-block" id="installBtn" style="display:none">📲 How to install</button>
       <div id="liveNotice" role="status"></div>
-      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v28</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v29</div>
       <div class="divider">Play a friend live</div>
       <p style="font-size:13.5px;color:var(--ink-soft);margin:4px 2px 10px;line-height:1.55;text-align:left">Send your friend this app's link — https://dready3825-bit.github.io/go-fish-2/ — they can install it too. One of you taps <b>Create a room</b> and gets a short 6-letter code — tell your friend the code, they type it in below and tap <b>Join room</b>. That's it — no long codes to copy and paste.</p>
 
@@ -743,6 +753,7 @@
           </div>
           <div id="drawNote" style="display:none"></div>
           <div id="modPanel"></div>
+          <div id="cpuModCallout"></div>
           <div id="handRow"></div>
           <div id="layRow" style="margin-top:10px;display:none">
             <button class="btn btn-primary" id="layBtn">Lay down your pair into your pile</button>
@@ -1025,11 +1036,11 @@ var MOD_NEEDS_TARGET = { swap:"card", magnet:"card", bait:"card", goldie:"card" 
 function shuffle(a){ a=a.slice(); for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
 function isModCard(c){ return "mod" in c; }
 function emptyPlayer(){ return { hand:[], pairs:[], modifiers:[], peeked:[], shielded:false, ringShielded:false, sonar:null, sense:null, scoped:null, fogged:false, frozen:false, skipTurn:false }; }
-function emptyState(){ return { deck:[], players:[emptyPlayer(),emptyPlayer()], turn:0, phase:"playing", winner:null, modUsedThisTurn:false, whirlUsedThisTurn:false, whirlWindow:false, log:[], lastEvent:null, eventSeq:0, rematch:[false,false], endReason:null, lastMod:[null,null], lastOverflow:null, overflows:[], dealing:false, pendingLucky:null }; }
+function emptyState(){ return { deck:[], players:[emptyPlayer(),emptyPlayer()], turn:0, phase:"playing", winner:null, modUsedThisTurn:false, whirlUsedThisTurn:false, whirlWindow:false, log:[], lastEvent:null, eventSeq:0, rematch:[false,false], endReason:null, lastMod:[null,null], lastOverflow:null, overflows:[], dealing:false, pendingLucky:null, receipts:[{},{}] }; } /* v29 (Rule 4): receipts[who][kind] counts modifier RECEIPTS (deal + pond draws + Lucky keeps), once per receipt — the 1-copy-per-player cap reads this. */
 function pushLog(st,text,actor){ st.log.push({text:text,actor:actor}); if(st.log.length>40) st.log.splice(0, st.log.length-40); }
 function setEvent(st,ev){ st.eventSeq+=1; ev.seq=st.eventSeq; st.lastEvent=ev; }
 function fishDeck(){ var cs=[]; for(var r=0;r<RANKS.length;r++) for(var s=0;s<SUITS.length;s++) cs.push({ id:RANKS[r]+SUITS[s], rank:RANKS[r], suit:SUITS[s] }); return cs; }
-function buildDeck(){ var mods=[]; MODIFIERS.forEach(function(m){ for(var k=0;k<2;k++) mods.push({ id:"mod-"+m+"-"+k, mod:m }); }); return shuffle(fishDeck().concat(mods)); }
+function buildDeck(){ var mods=[]; for(var k=0;k<2;k++) MODIFIERS.forEach(function(m){ mods.push({ id:"mod-"+m+"-"+k, mod:m }); }); return shuffle(fishDeck().concat(mods)); } /* v29 parity (N4): copies ordered in two kind-by-kind passes, exactly as the worker's buildDeck orders them (client ids stay unique) — the old per-kind pairing ordered the pre-shuffle deck differently, so a solo deal diverged from the worker's deal. */
 function extractPairs(st,who){
   var p=st.players[who], buckets={}, order=[], i, c, pid;
   for(i=0;i<p.hand.length;i++){ c=p.hand[i]; pid=pairIdFor(c); if(!buckets[pid]){ buckets[pid]=[]; order.push(pid); } buckets[pid].push(c); }
@@ -1069,45 +1080,52 @@ function enforceModLimit(st,who){
     st.overflows.push({ who:who, mod:old });
   }
 }
+/* v29 (Rule 4): no duplicate shields, max 1 of each mod per player. When
+   a player would draw a duplicate modifier, swap it for a random unseen
+   card from the pond instead. The duplicate goes back into the pond (so
+   the other player can still draw their copy). Returns the replacement
+   card, or null when the pond holds no valid replacement (the draw then
+   simply yields nothing — fish is always a valid swap, so this only
+   happens when the pond is out of fish and holds only cards this player
+   already received). Mirrors the sim engine's swapForUnseen exactly
+   (same Math.random consumption order, for differential parity). */
+function isDupMod(st,who,c){
+  if(!isModCard(c)) return false;
+  var p=st.players[who];
+  if(c.mod==="shield" && (p.ringShielded || p.modifiers.indexOf("shield")>=0)) return true;
+  if(c.mod==="anchor" && (p.shielded || p.modifiers.indexOf("anchor")>=0)) return true;
+  if(c.mod==="fog" && (p.fogged || p.modifiers.indexOf("fog")>=0)) return true;
+  if(st.receipts && st.receipts[who][c.mod]) return true;
+  return false;
+}
+function recordReceipt(st,who,mod){ if(!st.receipts) st.receipts=[{},{}]; var r=st.receipts[who]; r[mod]=(r[mod]||0)+1; }
+function swapForUnseen(st,who,dupCard){
+  st.deck.splice(Math.floor(Math.random()*(st.deck.length+1)), 0, dupCard);
+  /* v29 parity: the worker's swap prefers a FISH replacement (any unseen
+     fish before any unseen modifier) — match it exactly. */
+  var fish=[], other=[];
+  for(var i=0;i<st.deck.length;i++){ if(isDupMod(st,who,st.deck[i])) continue; if(isModCard(st.deck[i])) other.push(i); else fish.push(i); }
+  var cands=fish.length ? fish : other;
+  if(!cands.length) return null;
+  var idx=cands[Math.floor(Math.random()*cands.length)];
+  return st.deck.splice(idx,1)[0];
+}
 function drawCards(st,who,n,opts){
   opts = opts || {};
   var p=st.players[who], cards=[], mods=[];
   for(var i=0;i<n && st.deck.length>0;i++){
-    var card;
-    /* MOD FLOW — DRIFT FIX (N4): mod-first is OPT-IN, matching the
-       worker (engine.js drawCards only goes mod-first when
-       opts.modFirst is passed, which happens only via ensureMod).
-       The old unconditional rule made every solo draw mod-first while
-       live draws were top-of-deck. The "always a mod in hand"
-       guarantee still runs through topUpMod, which passes
-       {modFirst:true}; every other draw is top-of-deck, like live.
-       Scan direction also matches the worker: from the deck end
-       (the top of the pond) inward. */
-    if(opts.modFirst && p.modifiers.length===0){
-      var mi=-1;
-      for(var k=st.deck.length-1;k>=0;k--){ if(isModCard(st.deck[k])){ mi=k; break; } }
-      card = mi>=0 ? st.deck.splice(mi,1)[0] : st.deck.pop();
-    } else card=st.deck.pop();
-    if(isModCard(card) && card.mod==="shield" && p.ringShielded){
-      /* LIFE RING DUPLICATE (v28): a Life Ring is already up for this
-         player — drawing another from the pond is never a wasted
-         duplicate. The player draws the next fish card from the pond
-         instead, and the ring goes back into the pond. If the pond
-         holds no fish card at all, the player keeps the ring — but
-         the ring must NOT also stay in the pond (that duplicated it:
-         the same ring counted in both the deck and the hand, and the
-         modifiers array grew unboundedly in late-game random games). */
-      var fi=-1;
-      for(var k=st.deck.length-1;k>=0;k--){ if(!isModCard(st.deck[k])){ fi=k; break; } }
-      if(fi>=0){
-        var fish=st.deck.splice(fi,1)[0];
-        st.deck.splice(Math.floor(Math.random()*(st.deck.length+1)), 0, card); // ring back into the pond at a random spot
-        p.hand.push(fish); cards.push(fish); pushLog(st,"Life Ring already up — the pond dealt a fish card instead of a second ring.",who);
-      }
-      else { p.modifiers.push(card.mod); mods.push(card.mod); enforceModLimit(st,who); } /* pond holds no fish card at all: keep the ring rather than lose the draw */
-      continue;
+    /* v29 (Rule 1): no mod-first top-up — every pond draw is the top card. */
+    var card=st.deck.pop();
+    /* v29 (Rule 4): a drawn duplicate (shield/anchor/fog already up or in
+       hand, or any kind already received this game) swaps for a random
+       unseen pond card instead; the duplicate goes back into the pond.
+       If the pond holds no valid replacement the draw yields nothing. */
+    if(isModCard(card) && isDupMod(st,who,card)){
+      var rep=swapForUnseen(st,who,card);
+      if(!rep) continue;
+      card=rep;
     }
-    if(isModCard(card)){ p.modifiers.push(card.mod); mods.push(card.mod); enforceModLimit(st,who); } else { p.hand.push(card); cards.push(card); }
+    if(isModCard(card)){ p.modifiers.push(card.mod); mods.push(card.mod); recordReceipt(st,who,card.mod); enforceModLimit(st,who); } else { p.hand.push(card); cards.push(card); }
   }
   return { cards:cards, mods:mods };
 }
@@ -1137,10 +1155,6 @@ function passTurn(st,who){
   if(st.players[to].skipTurn){
     st.players[to].skipTurn=false;
     st.turn=who; st.modUsedThisTurn=false; st.whirlWindow=false;
-    /* MOD FLOW (Jenna 09:34): the player going again tops up too. */
-    if(topUpMod(st, who)){
-      pushLog(st, "The pond deals a modifier to the player who held none.", "sys");
-    }
     ensureHand(st, who);
     return;
   }
@@ -1155,12 +1169,6 @@ function passTurn(st,who){
     return;
   }
   st.turn=to; st.modUsedThisTurn=false; st.whirlUsedThisTurn=false; st.whirlWindow=false;
-  /* MOD FLOW (Jenna 09:34): the incoming player tops up — holding no
-     modifiers at the start of your turn, the pond deals you one
-     (while any remain in the pond). See topUpMod. */
-  if(topUpMod(st, st.turn)){
-    pushLog(st, "The pond deals a modifier to the player who held none.", "sys");
-  }
   ensureHand(st, st.turn);
 }
 /* WHIRLPOOL WINDOW (v28): after your main action, if you hold a
@@ -1184,51 +1192,10 @@ function endTurn(st,who){
   passTurn(st,who); checkEnd(st); return { ok:true };
 }
 function drawTotal(r){ return r.cards.length + r.mods.length; }
-/* MOD FLOW — the "always a mod in hand" guarantee (OVERHAUL): if `who`
-   holds NO modifiers and the pond still has one, the pond deals them
-   exactly one. drawCards' mod-first rule makes the draw a modifier,
-   never a fish, so no pair can form silently and the 3-mod limit is
-   untouched. Called when a turn passes (passTurn), when a player EARNS
-   another action (a pair, a fished mate, Whirlpool Spin, laying pairs
-   down), and at the start of the bot's step — every moment a player is
-   about to act. The only time anyone sits mod-less is when the pond
-   itself is out of modifiers (late endgame). Returns true if it dealt. */
-function topUpMod(st,who){
-  if(st.players[who].modifiers.length>0) return false;
-  if(!st.deck.some(function(c){ return isModCard(c); })) return false;
-  var r=drawCards(st,who,1,{modFirst:true});
-  /* STRANDED-PAIR FIX: the draw above can deliver a FISH, not a mod —
-     the Life Ring duplicate rule swaps a shield for the next fish in the
-     pond — and that fish can complete a pair in hand. Bank it at once:
-     without this the pair sits stranded, checkEnd refuses to finish
-     while a pair is held, and the CPU never lays pairs down, so the game
-     can stall forever with turns passing and no way to progress.
-     The bank can also COMPLETE the game (26th pair), and several
-     callers never end-check after the top-up (applyModifier's
-     pair-retain path, botStep's direct top-up), so end-check here, at
-     the single choke point, instead of relying on every caller. */
-  var topUpPairs=extractPairs(st,who); checkEnd(st);
-  if(topUpPairs.length>0){
-    /* TOP-UP NARRATION: a pair banked by the refill was banked silently —
-       the pile count jumped with no line naming it. Name the drawn card
-       (when known) and the pair in the event text and the move log, and
-       stamp the pairs on the event so the client and the pair-trace
-       tooling can attribute them to this top-up (the pair can belong to
-       the incoming player while lastEvent still names the other player's
-       action). Wording stays neutral about who drew — this function has
-       no player names — the stamp carries the seat. */
-    var drewFace=r.cards.length>0 ? r.cards[0].rank+" of "+SUIT_NAME[r.cards[0].suit] : null;
-    var topUpLabels=topUpPairs.map(pairLabel).join(", ");
-    var topUpClause=drewFace ? " And on the refill, the "+drewFace+" banked the "+topUpLabels+"!" : " The refill banked the "+topUpLabels+"!";
-    if(st.lastEvent){
-      st.lastEvent.topUpPairs=(st.lastEvent.topUpPairs||[]).concat(topUpPairs.map(function(pid){ return { pairId:pid, rank:pairRankFromId(pid), color:pairColorFromId(pid), who:who }; }));
-      if(st.lastEvent.text) st.lastEvent.text+=topUpClause;
-    }
-    pushLog(st, drewFace ? "The refill banked the "+topUpLabels+" — the "+drewFace+" completed the pair." : "The refill banked the "+topUpLabels+".", who);
-  }
-  return st.players[who].modifiers.length>0;
-}
-function ensureHand(st,who){ var g=0; while(st.players[who].hand.length===0 && st.deck.length>0 && g++<80) drawCards(st,who,1); }
+/* v29 (Rule 1): ensureMod/topUpMod is DELETED — no code path deals a
+   player a mod to keep them at >=1. After the deal, mods only arrive
+   from pond draws. */
+function ensureHand(st,who){ var g=0; while(st.players[who].hand.length===0 && st.deck.length>0 && g++<80) drawCards(st,who,1); /* v29 (Rule 1): the refill only guarantees a fish card. Bank any pair the refill formed (structurally impossible — a single fish into an empty hand cannot pair — kept as a safety net, as in the sim engine). */ extractPairs(st,who); }
 function checkEnd(st){
   if(st.phase==="finished") return true;
   var total=st.players[0].pairs.length + st.players[1].pairs.length;
@@ -1252,30 +1219,71 @@ function checkEnd(st){
   }
   return finish("The pond is empty and none of the cards left in hands can pair.");
 }
+function dealDrawCard(st,who){
+  /* v29 parity (N4): ONE deal draw with the WORKER's drawCards semantics —
+     duplicate swap, and on a 4th modifier the oldest ponds back with a
+     shuffle, inline. dealGame uses this instead of drawCards so a solo
+     deal is card-for-card (and draw-for-draw) the deal the worker
+     produces. The mid-game drawCards keeps the client's own overflow
+     narration path (enforceModLimit); the deal clears its log anyway. */
+  var p=st.players[who];
+  if(st.deck.length===0) return;
+  var card=st.deck.pop();
+  if(isModCard(card) && isDupMod(st,who,card)){
+    var rep=swapForUnseen(st,who,card);
+    if(!rep) return;
+    card=rep;
+  }
+  if(isModCard(card)){
+    if(p.modifiers.length>=3){
+      var old=p.modifiers.shift();
+      st.deck=shuffle(st.deck.concat([{ id:"mod-"+old, mod:old }]));
+    }
+    p.modifiers.push(card.mod); recordReceipt(st,who,card.mod);
+  } else { p.hand.push(card); }
+}
 function dealGame(st,names){
   var fresh=emptyState();
   fresh.deck=buildDeck();
   fresh.dealing=true;
-  for(var i=0;i<7;i++){ drawCards(fresh,0,1,{modFirst:true}); drawCards(fresh,1,1,{modFirst:true}); }
+  /* v29 (Rule 1): the deal is plain top-of-deck draws — no mod-first.
+     The guard loop deals until each player holds 7 cards (a 4th-mod
+     overflow during the deal ponds the oldest, so that player draws
+     again — each player still ends with exactly 7 cards, pond 72). */
+  var guard=0;
+  while((fresh.players[0].hand.length+fresh.players[0].modifiers.length<7 ||
+         fresh.players[1].hand.length+fresh.players[1].modifiers.length<7) && guard++<200){
+    if(fresh.players[0].hand.length+fresh.players[0].modifiers.length<7) dealDrawCard(fresh,0);
+    if(fresh.players[1].hand.length+fresh.players[1].modifiers.length<7) dealDrawCard(fresh,1);
+  }
   fresh.dealing=false;
-  /* HAND LIMIT AT THE DEAL (FROM-SCRATCH REVIEW): the 3-mod limit holds
-     for opening hands too. An excess dealt mod swaps straight back into
-     the pond for a fish card, so every opening hand is still 7 cards with
-     at most 3 mods and at least 4 fish — the pond stays at 72, the dealt
-     mod guarantee (at least 1) is untouched, and a mod-only opening hand
-     (which could never ask and could soft-lock on target mods) is
-     impossible. enforceModLimit itself stays out of the deal because it
-     ponds the excess without a replacement, which would shrink the hand. */
-  [0,1].forEach(function(who){
-    var p=fresh.players[who];
-    while(p.modifiers.length>3){
-      var old=p.modifiers.shift();
-      var pos=fresh.deck.length?Math.floor(Math.random()*(fresh.deck.length+1)):0;
-      fresh.deck.splice(pos,0,{ id:"mod-"+old+"-r"+Math.floor(Math.random()*1e9), mod:old });
-      var fi=-1;
-      for(var k=fresh.deck.length-1;k>=0;k--){ if(!isModCard(fresh.deck[k])){ fi=k; break; } }
-      if(fi<0) break;
-      p.hand.push(fresh.deck.splice(fi,1)[0]);
+  /* Deal-time overflow lines (a 4th modifier ponded while dealing) are
+     noise — clear them before the game log starts. */
+  fresh.log=[];
+  /* v29 (Rule 1): fix up each hand to the deal rule (1–2 mods) by
+     swapping cards with the pond. Swaps preserve the 86-card total and
+     the pond count (72). A swap is always possible: at most 14 mods and
+     14 fish can be dealt, so ≥20 mods and ≥38 fish remain in the pond.
+     ≥4 fish is unchanged — with at most 2 mods in a 7-card hand, every
+     opening hand holds at least 5 fish. */
+  [0,1].forEach(function(s){
+    var p=fresh.players[s];
+    while(p.modifiers.length<1 && p.hand.length>0){
+      var mi=fresh.deck.findIndex(function(c){ return isModCard(c); });
+      if(mi<0) break;
+      var modCard=fresh.deck.splice(mi,1)[0];
+      var fi=Math.floor(Math.random()*p.hand.length);
+      var fish=p.hand.splice(fi,1)[0];
+      p.modifiers.push(modCard.mod); recordReceipt(fresh,s,modCard.mod);
+      fresh.deck=shuffle(fresh.deck.concat([fish]));
+    }
+    while(p.modifiers.length>2){
+      var excess=p.modifiers.shift();
+      var fj=fresh.deck.findIndex(function(c){ return !isModCard(c); });
+      if(fj<0){ p.modifiers.push(excess); break; }
+      var fishCard=fresh.deck.splice(fj,1)[0];
+      p.hand.push(fishCard);
+      fresh.deck=shuffle(fresh.deck.concat([{ id:"mod-"+excess, mod:excess }]));
     }
   });
   var startPairs=[extractPairs(fresh,0), extractPairs(fresh,1)];
@@ -1345,7 +1353,7 @@ function applyAsk(st,who,card,names){
       setEvent(st,{ kind:"ask_hit", actor:who, rank:rank, color:colorOf(mine.suit), askText:phrase, mateId:mate.id, count:1, text:name+" asked \""+phrase+"\" — yes! "+oppName+" handed over the "+mateLbl+", that one card only. Ask again!" });
     }
     ensureHand(st,who);
-    if(st.phase==="playing" && topUpMod(st,who) && st.lastEvent) st.lastEvent.text+=" The pond deals "+name+" a fresh modifier — "+proThey(name)+" held none.";
+
     checkEnd(st); return { ok:true };
   }
   var haul=drawCards(st,who,1), drawnCard=haul.cards[0], drewMod=haul.mods[0];
@@ -1354,10 +1362,10 @@ function applyAsk(st,who,card,names){
   var wished = drawnCard && drawnCard.id===mate.id;
   if(paired2.length>0){ var pid2=paired2[0];
     pushLog(st, name+" went fishing — pole into the whirlpool — and paired the "+pairLabel(pid2)+"!","sys");
-    setEvent(st,{ kind:"pair", actor:who, rank:rank, color:colorOf(mine.suit), askText:phrase, mateId:mate.id, drawnCardId:drawnCard?drawnCard.id:undefined, pairRank:pairRankFromId(pid2), pairId:pid2, text:oppName+" didn't have the "+mateLbl+" — \"Go Fish!\" "+name+" cast into the whirlpool, hauled one up, and made a pair: "+pairLabel(pid2)+"! Go again!" });
+    setEvent(st,{ kind:"pair", actor:who, rank:rank, color:colorOf(mine.suit), askText:phrase, mateId:mate.id, drawnCardId:drawnCard?drawnCard.id:undefined, pairRank:pairRankFromId(pid2), pairId:pid2, text:oppName+" didn't have the "+mateLbl+" — \"Go Fish!\" "+name+" cast into the whirlpool, hauled one up, and made a pair: "+pairLabel(pid2)+"! Pair banked." });
   } else if(wished){
-    pushLog(st, name+" went fishing and fished the exact mate they asked for — the "+mateLbl+"! Cast again.", who);
-    setEvent(st,{ kind:"fish_wish", actor:who, rank:rank, color:colorOf(mine.suit), askText:phrase, mateId:mate.id, drawnCardId:drawnCard.id, text:oppName+" said \"Go Fish!\" — "+name+" cast into the whirlpool and fished the exact mate, the "+mateLbl+"! Ask again!" });
+    pushLog(st, name+" went fishing and fished the exact mate they asked for — the "+mateLbl+"! Pair banked.", who);
+    setEvent(st,{ kind:"fish_wish", actor:who, rank:rank, color:colorOf(mine.suit), askText:phrase, mateId:mate.id, drawnCardId:drawnCard.id, text:oppName+" said \"Go Fish!\" — "+name+" cast into the whirlpool and fished the exact mate, the "+mateLbl+"! Pair banked." });
   } else if(drewMod){
     pushLog(st, name+" asked \""+phrase+"\" — "+oppName+" "+vrb(oppName,"don't","doesn't")+" hold the "+mateLbl+". Go Fish — and the haul was a modifier card!", who);
     setEvent(st,{ kind:"ask_miss", actor:who, rank:rank, color:colorOf(mine.suit), askText:phrase, mateId:mate.id, drewMod:drewMod, text:name+" asked for the "+mateLbl+" — "+oppName+" "+vrb(oppName,"don't","doesn't")+" have that exact card. \"Go Fish!\" "+name+" "+vrb(name,"cast","casts")+" into the whirlpool and "+vrb(name,"haul","hauls")+" up a modifier card!" });
@@ -1365,17 +1373,11 @@ function applyAsk(st,who,card,names){
     pushLog(st, name+" asked \""+phrase+"\" — "+oppName+" "+vrb(oppName,"don't","doesn't")+" hold the "+mateLbl+". Go Fish!", who);
     setEvent(st,{ kind:"ask_miss", actor:who, rank:rank, color:colorOf(mine.suit), askText:phrase, mateId:mate.id, drawnCardId:drawnCard?drawnCard.id:undefined, text:name+" asked for the "+mateLbl+" — "+oppName+" "+vrb(oppName,"don't","doesn't")+" have that exact card. \"Go Fish!\" "+name+" "+vrb(name,"cast","casts")+" the pole into the whirlpool and "+vrb(name,"draw","draws")+" 1." });
   }
-  if(!wished && paired2.length===0){
-    /* WHIRLPOOL WINDOW (v28): a missed ask would pass the turn — but if
-       the asker holds a Whirlpool Spin they haven't used this turn, the
-       turn holds instead: they may spin it (free) and go again, or end
-       the turn. Without a Whirlpool the turn passes as before. */
-    if(!maybeWhirlWindow(st,who)) passTurn(st,who);
-  } else { ensureHand(st,who);
-    /* Earned another action (pair / fished mate): the mod guarantee
-       covers this action too — top up before they act again. */
-    if(st.phase==="playing" && topUpMod(st,who) && st.lastEvent) st.lastEvent.text+=" The pond deals "+name+" a fresh modifier — "+proThey(name)+" held none.";
-  }
+  /* v29 (Rule 2 — ask-hits only): a Go Fish draw that pairs, or fishes
+     the exact mate, banks the pair for points, then the turn passes.
+     No extra turn for a pond pair. */
+  ensureHand(st,who);
+  if(st.phase==="playing" && !maybeWhirlWindow(st,who)) passTurn(st,who);
   /* DISAPPEARING-MOD FIX: the overflow drain runs AFTER the turn pass,
      not before it — passTurn's hand refill for the incoming player can
      itself draw a 4th modifier and pond their oldest, and that swap
@@ -1395,7 +1397,9 @@ function layDownPairs(st,who,names){
   pushLog(st, names[who]+" laid down "+formed.map(pairLabel).join(", ")+" from their hand — banked to their pile.", who);
   setEvent(st,{ kind:"pair", actor:who, pairRank:pairRankFromId(pid), pairId:pid, text:names[who]+" laid down the "+pairLabel(pid)+" from "+proTheir(names[who])+" hand — into "+proTheir(names[who])+" pair pile!" });
   ensureHand(st,who);
-  if(st.phase==="playing" && topUpMod(st,who) && st.lastEvent) st.lastEvent.text+=" The pond deals "+names[who]+" a fresh modifier — "+proThey(names[who])+" held none.";
+  /* v29 (Rule 2 — ask-hits only): a pair laid down from the hand banks
+     for points, then the turn passes — no extra turn. */
+  if(st.phase==="playing" && !maybeWhirlWindow(st,who)) passTurn(st,who);
   var oNoteLay=overflowNote(st,names);
   if(oNoteLay && st.lastEvent) st.lastEvent.text+=oNoteLay;
   checkEnd(st); return { ok:true };
@@ -1428,6 +1432,9 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
     effMod=st.lastMod[1-who];
     if(!effMod) return { ok:false, error:oppName+" "+vrb(oppName,"haven't","hasn't")+" played a modifier yet — Mirror Pond has nothing to copy." };
   }
+  /* v29 (Rule 4 — Mirror Pond cannot copy Reel In): rejected with the
+     pinned text (refunded — the card was never spent, see below). */
+  if(mod==="mirror" && effMod==="reel") return { ok:false, error:"Mirror Pond can't copy Reel In — Reel In can only steal once per player per game." };
   /* ONE FREE SPIN PER TURN: a second Whirlpool in the same turn is
      rejected outright — including one reached by a Mirror Pond copy
      (effMod is already resolved above). The flag resets only when a
@@ -1449,9 +1456,17 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
   if(effMod==="magnet" && opp.hand.length===0) return { ok:false, error:poss(oppName)+" hand is empty — nothing to hunt." };
   if(effMod==="magnet" && !discardCardId) return { ok:false, error:"Pick one of your cards for the hook to hunt with first." };
   if(effMod==="magnet" && !me.hand.some(function(c){ return c.id===discardCardId; })) return { ok:false, error:"That card isn't in your hand." };
+  /* v29 (Rule 3 — gate): a Magnet Hook whose mate isn't held is rejected
+     (refunded — the card was never spent, see below). */
+  if(effMod==="magnet"){ var mg=me.hand.find(function(c){ return c.id===discardCardId; }); if(mg && !opp.hand.some(function(o){ return o.id===mateIdOf(mg); })) return { ok:false, error:"The mate of your "+mg.rank+" isn't in your opponent's hand — the hook has nothing to catch." }; }
   if(effMod==="storm" && opp.hand.length===0) return { ok:false, error:poss(oppName)+" hand is empty — nothing to scatter." };
   if(effMod==="shield" && me.ringShielded) return { ok:false, error:"Your Life Ring is already up." };
   if(effMod==="sense" && me.hand.length===0) return { ok:false, error:"Your hand is empty — no mates to sense." };
+  /* v29 (Rule 3 — gates, fog-first): Mate Sense with no mate to sense is
+     rejected — UNLESS the opponent is fogged, when the fog fizzle+lift
+     below runs first (a fogged Sense is spent and lifts the fog, never
+     refunded). */
+  if(effMod==="sense" && !opp.fogged && !me.hand.some(function(c){ return opp.hand.some(function(o){ return o.id===mateIdOf(c); }); })) return { ok:false, error:"No mates to sense — your opponent holds none of the mates to your cards." };
   if(effMod==="monster" && me.hand.length===0) return { ok:false, error:"Your hand is empty — the monster needs one of your cards to eat." };
   if(effMod==="anchor" && me.shielded) return { ok:false, error:"Your anchor is already down." };
   if(effMod==="reel" && opp.pairs.length===0) return { ok:false, error:oppName+" "+vrb(oppName,"have","has")+" no pairs in "+proTheir(oppName)+" pile yet — nothing to reel in." };
@@ -1481,7 +1496,7 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
        records the copy whenever the recursive call returns ok. A
        direct blocked mod is NOT recorded (N2, below). */
     if(mod==="mirror") st.lastMod[who]=effMod;
-    ensureHand(st,who); checkEnd(st);
+    checkEnd(st); /* v29 parity (N6): no actor refill here — the worker refills only via passTurn (incoming player). */
     /* DRIFT FIX (N3): a blocked mod opens the Whirlpool window, like
        the worker's applyModifier tail — it does not pass the turn
        outright. A player holding an unused Whirlpool keeps the spin. */
@@ -1494,7 +1509,10 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
   /* FOG BANK (v28): a Peek or Mate Sense played into fog is SPENT and
      fizzles — it learns nothing, and the fog is consumed (falls off).
      This is the shield working as designed, not a rejected play: the
-     opponent USES their Peek/Mate Sense and it serves the fog's purpose. */
+     opponent USES their Peek/Mate Sense and it serves the fog's purpose.
+     v29: the fog check runs BEFORE the 0-mate gate above (the gate is
+     skipped while fogged), so a Sense into fog always fizzles and lifts
+     it — never refunded. */
   if((effMod==="peek"||effMod==="sense") && opp.fogged){
     opp.fogged=false;
     var fogText="Fog Bank! "+poss(name)+" "+MODIFIER_INFO[effMod].name+" vanished into "+possLow(oppName)+" fog — it fizzled, and the fog lifted.";
@@ -1503,7 +1521,7 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
     /* DRIFT FIX (N1): same as the shield block above — a Mirror Pond
        copy that fizzles on fog is still recorded as the copied mod. */
     if(mod==="mirror") st.lastMod[who]=effMod;
-    ensureHand(st,who); checkEnd(st);
+    checkEnd(st); /* v29 parity (N6): no actor refill here — the worker refills only via passTurn (incoming player). */
     /* DRIFT FIX (N3): a fog-fizzled mod opens the Whirlpool window,
        like the worker — it does not pass the turn outright. */
     if(st.phase==="playing" && !maybeWhirlWindow(st,who)) passTurn(st,who);
@@ -1522,12 +1540,9 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
 
   function pairFields(paired){ return paired && paired.length ? { pairRank:pairRankFromId(paired[0]), pairId:paired[0] } : {}; }
   function evBase(kind,extra){ var e={ kind:kind, actor:who }; Object.keys(extra||{}).forEach(function(k){ e[k]=extra[k]; }); return e; }
-  /* PAIR-BY-MOD EXTRA TURN: the actor's pair count before the modifier
-     resolves. If it grows (Goldie's Gift, Magnet Hook, Reel In, a lucky
-     haul…), the pair earns another action at the end, exactly like a
-     pair from asking or fishing. The OPPONENT's pairs growing (Storm
-     Surge scattering into a pair, Chum's free draw) does not count. */
-  var pairsBefore=me.pairs.length;
+  /* v29 (Rule 2): pairs banked by a modifier bank for points but do NOT
+     earn an extra turn (ask-hits only). The OPPONENT's pairs growing
+     (Storm Surge scattering into a pair) never counted either. */
   var whirlPass=false; /* set by the Whirlpool case when spun from the window */
 
   switch(effMod){
@@ -1709,28 +1724,22 @@ function applyModifier(st,who,mod,discardCardId,names,rank){
   if(oNote && st.lastEvent) st.lastEvent.text+=oNote;
   /* Lucky Lure is waiting on its keep-1 choice: the turn does NOT pass
      and the game does not end until applyLuckyChoice resolves it. */
-  if(st.pendingLucky && st.pendingLucky.who===who) return { ok:true };
-  ensureHand(st,who); checkEnd(st);
+  if(st.pendingLucky && st.pendingLucky.who===who){ ensureHand(st,who); return { ok:true }; } /* v29 parity: the worker's retainTurn branch refills the actor when a Lucky choice pends. */
+  checkEnd(st); /* v29 parity (N6): NO actor refill here — the worker's applyModifier refills the actor only in the retainTurn branch (Whirlpool / Lucky-pending, handled above); every other refill is passTurn's (incoming player). Refilling the actor here dealt a card the worker never deals (Goldie empty-hand). */
   /* A modifier IS your turn: playing one ends it — except Whirlpool Spin,
      which hands you another action instead of passing, and except a
      modifier that BANKED A PAIR for the actor: a pair always earns
      another action, however it was made — asking, fishing, or a mod
      (Goldie's Gift fetching the mate used to pass the turn away; now
      the pair keeps the turn, same as any other pair). */
-  var pairedByMod = me.pairs.length>pairsBefore;
-  if(pairedByMod && st.phase==="playing" && st.lastEvent) st.lastEvent.text+=" Go again!";
   /* WHIRLPOOL (v28): a free spin from the window passes the turn now —
-     the skip brings it straight back for exactly one more action. Any
-     other modifier that banks no pair opens the window instead (if the
+     the skip brings it straight back for exactly one more action. A
+     first-action Whirlpool keeps the turn (free action). Every other
+     modifier — pair or no pair — opens the window instead (if the
      player holds an unused Whirlpool), or passes the turn. */
   if(st.phase==="playing" && whirlPass){ passTurn(st,who); }
-  else if(st.phase==="playing" && effMod!=="whirl" && !pairedByMod){ if(!maybeWhirlWindow(st,who)) passTurn(st,who); }
-  if(st.phase==="playing" && !whirlPass && (effMod==="whirl" || pairedByMod)){ st.modUsedThisTurn=false;
-    /* The earned extra action may follow spending the player's last
-       modifier, so the guarantee tops them up first, same as any
-       other earned turn. */
-    if(topUpMod(st,who) && st.lastEvent) st.lastEvent.text+=" The pond deals "+name+" a fresh modifier — "+proThey(name)+" held none.";
-  }
+  else if(st.phase==="playing" && effMod!=="whirl"){ if(!maybeWhirlWindow(st,who)) passTurn(st,who); }
+  if(st.phase==="playing" && !whirlPass && effMod==="whirl"){ st.modUsedThisTurn=false; ensureHand(st,who); } /* v29 parity: the worker's retainTurn branch refills the actor on a kept turn (Whirlpool). */
   /* DISAPPEARING-MOD FIX: second drain, after the turn pass — the
      incoming player's hand refill can pond their oldest modifier, and
      that swap is narrated on this event instead of vanishing. */
@@ -1760,7 +1769,15 @@ function applyLuckyChoice(st,who,choiceId,names){
   if(pondedBack.length) st.deck=shuffle(st.deck.concat(pondedBack));
   var me=st.players[who], name=names[who];
   var keptLabel="nothing";
-  if(isModCard(keep)){ me.modifiers.push(keep.mod); enforceModLimit(st,who); keptLabel="the "+MODIFIER_INFO[keep.mod].name+" modifier"; }
+  /* v29 (Rule 4 — lenient Lucky keep edge): if this kind was already
+     received, swap the kept card for a random unseen pond card instead.
+     If no valid replacement exists, the duplicate is KEPT rather than
+     losing the choice — the only way the 1-copy cap can be broken. */
+  if(isModCard(keep) && st.receipts && st.receipts[who][keep.mod]){
+    var repL=swapForUnseen(st,who,keep);
+    if(repL) keep=repL;
+  }
+  if(isModCard(keep)){ me.modifiers.push(keep.mod); recordReceipt(st,who,keep.mod); enforceModLimit(st,who); keptLabel="the "+MODIFIER_INFO[keep.mod].name+" modifier"; }
   else { me.hand.push(keep); keptLabel="the "+keep.rank+SUIT_GLYPH[keep.suit]; }
   var prL=extractPairs(st,who); sortHand(me);
   pushLog(st, name+" cast a Lucky Lure, hauled "+pool.length+", kept "+keptLabel+", ponded the other "+pondedBack.length+".","sys");
@@ -1769,11 +1786,10 @@ function applyLuckyChoice(st,who,choiceId,names){
   setEvent(st,eL);
   var oNoteL=overflowNote(st,names);
   if(oNoteL && st.lastEvent) st.lastEvent.text+=oNoteL;
-  ensureHand(st,who); checkEnd(st);
-  /* A kept card that pairs earns another action, same as any pair —
-     the turn only passes when the choice made no pair. */
-  if(st.phase==="playing" && prL.length){ st.lastEvent.text+=" Go again!"; if(topUpMod(st,who) && st.lastEvent) st.lastEvent.text+=" The pond deals "+name+" a fresh modifier — "+proThey(name)+" held none."; }
-  else if(st.phase==="playing" && !maybeWhirlWindow(st,who)) passTurn(st,who); /* LUCKY WHIRL WINDOW (Audit N12): a no-pair Lucky resolution is a main action — hold the turn for the free Whirlpool spin when one is held, exactly like applyAsk/applyModifier. */
+  checkEnd(st); /* v29 parity (N6): no actor refill here — the worker's applyLuckyChoice refills only via passTurn. */
+  /* v29 (Rule 2 — ask-hits only): a pair banked by the kept card banks
+     for points, then the turn passes — no extra turn. */
+  if(st.phase==="playing" && !maybeWhirlWindow(st,who)) passTurn(st,who); /* LUCKY WHIRL WINDOW (Audit N12): a Lucky resolution is a main action — hold the turn for the free Whirlpool spin when one is held, exactly like applyAsk/applyModifier. */
   /* DISAPPEARING-MOD FIX: drain after the turn pass, as in applyAsk. */
   var oNoteL2=overflowNote(st,names);
   if(oNoteL2 && st.lastEvent) st.lastEvent.text+=oNoteL2;
@@ -1798,6 +1814,10 @@ function buildView(st,seat,meta){
       fogged: !!opp.fogged, frozen: !!opp.frozen,
       online: meta.oppOnline },
     oppLastMod: st.lastMod ? st.lastMod[1-seat] : null,
+    /* v29 (Rule 3): TRUE when the opponent is fogged OR holds >=1 mate to
+       a card in the player's hand; FALSE only when the opponent is
+       un-fogged and holds 0 mates. Boolean only — never which cards. */
+    senseUsable: !!opp.fogged || me.hand.some(function(c){ return opp.hand.some(function(o){ return o.id===mateIdOf(c); }); }),
     pondCount: st.deck.length,
     yourTurn: st.phase==="playing" && st.turn===seat,
     whirlWindow: !!st.whirlWindow,
@@ -1819,7 +1839,7 @@ function noteBotAsk(st,card){ if(!card) return; if(!st.botAsks) st.botAsks=[]; s
 function botStep(st,names){
   var bot=st.players[1], human=st.players[0];
   ensureHand(st,1);
-  topUpMod(st,1); /* the mod guarantee covers the bot identically — passTurn already topped it up; this is belt-and-braces for earned-turn chains */
+  /* v29 (Rule 1): no mod top-up — the bot plays with the mods it drew. */
   if(st.phase!=="playing" || st.turn!==1) return false;
   /* A Lucky Lure the bot hauled is waiting on its keep-1 pick — the bot
      chooses for itself (mate first, then a mod, then the first fish). */
@@ -1858,8 +1878,25 @@ function botStep(st,names){
     var live=ids.filter(function(id){ return human.hand.some(function(c){ return c.id===id; }) && bot.hand.some(function(c){ return mateIdOf(c)===id; }); });
     return live.length ? live[Math.floor(Math.random()*live.length)] : null;
   }
+  /* v29: the bot's OWN gate check — a mate provably exists right now
+     (the bot holds a card whose exact mate is still in the human's
+     hand). Same live validation as liveKnownMate, without needing
+     intel. Uses the persistent driver-side memory (peeked + humanAsks)
+     via sensedCard, never the sim bot's wiped live sense alone. */
+  function botHasMate(){
+    return bot.hand.some(function(c){ return human.hand.some(function(o){ return o.id===mateIdOf(c); }); });
+  }
   var knownMateId = (sensedMate && sensedMate.id) || liveKnownMate((bot.peeked||[]).map(function(p){ return p.id; })) || liveKnownMate(st.humanAsks);
   var sensedCard = knownMateId ? bot.hand.find(function(c){ return mateIdOf(c)===knownMateId; }) : null;
+  /* v29: a Mirror Pond copy must pass the copied mod's own gate — never
+     Reel In (pinned block), Magnet only with a known mate, Sense only
+     with a mate or into fog (fog-first). */
+  function mirrorCopyOk(copied){
+    if(copied==="reel") return false;
+    if(copied==="magnet") return !!sensedCard;
+    if(copied==="sense") return !!human.fogged || botHasMate();
+    return true;
+  }
   if(sensedCard && Math.random()<0.9){ noteBotAsk(st,sensedCard); applyAsk(st,1,sensedCard,names); return true; }
   /* One action per turn: the bot weighs its modifiers seriously and plays
      one when it's useful — it does not hoard them. */
@@ -1873,13 +1910,14 @@ function botStep(st,names){
     if(has("reel") && human.pairs.length>0 && Math.random()<0.9) choice="reel";
     else if(has("magnet") && sensedMine && Math.random()<0.9){ choice="magnet"; targetId=sensedMine.id; }
     else if(has("whirl") && Math.random()<0.5) choice="whirl";
-    else if(has("sense") && bot.hand.length>0 && human.hand.length>0 && !human.fogged && Math.random()<0.7) choice="sense";
+    else if(has("sense") && human.fogged && (has("peek") || Math.random()<0.4) && Math.random()<0.6) choice="sense"; /* v29: Sense into an active Fog Bank lifts it (fog-first — never a gate rejection), so a later Peek/Sense can see again. */
+    else if(has("sense") && bot.hand.length>0 && human.hand.length>0 && !human.fogged && botHasMate() && Math.random()<0.7) choice="sense"; /* v29: gate check — only sense when a mate provably exists. */
     else if(has("goldie") && bot.hand.length>0 && Math.random()<0.6){ choice="goldie"; targetId=bot.hand[Math.floor(Math.random()*bot.hand.length)].id; }
     else if(has("peek") && human.hand.length>0 && !human.fogged && Math.random()<0.5) choice="peek";
     else if(has("fog") && humanMods>=1 && Math.random() < ((human.modifiers.indexOf("peek")>=0 || human.modifiers.indexOf("sense")>=0) ? 0.8 : 0.35)) choice="fog";
     else if(has("shield") && !bot.ringShielded && humanMods>0 && Math.random()<0.75) choice="shield";
     else if(has("anchor") && !bot.shielded && humanMods>0 && Math.random()<0.75) choice="anchor";
-    else if(has("mirror") && st.lastMod[0] && Math.random()<0.55){ choice="mirror"; if(MOD_NEEDS_TARGET[st.lastMod[0]] && bot.hand.length) targetId=bot.hand[0].id; }
+    else if(has("mirror") && st.lastMod[0] && mirrorCopyOk(st.lastMod[0]) && Math.random()<0.55){ choice="mirror"; if(st.lastMod[0]==="magnet" && sensedCard) targetId=sensedCard.id; else if(MOD_NEEDS_TARGET[st.lastMod[0]] && bot.hand.length) targetId=bot.hand[0].id; }
     else if(has("double") && bot.hand.length<=3 && st.deck.length>=2 && Math.random()<0.7) choice="double";
     else if(has("lucky") && st.deck.length>=3 && bot.hand.length<=4 && Math.random()<0.55) choice="lucky";
     else if(has("snatch") && human.hand.length>=3 && Math.random()<0.65) choice="snatch";
@@ -1929,7 +1967,7 @@ function $(id){ return document.getElementById(id); }
 var els = {};
 ["lobby","game","nameInput","lobbyMsg","soloBtn","createBtn","modeChip","turnBanner","pondChip","muteBtn","leaveBtn",
  "sceneWrap","oppChip","convoStrip","hudTop","hudBottom","waitPanel","cancelWaitBtn",
- "oppPile","youPile","intelBar","intelLines","modPanel","luckyPanel","peekPanel","sensePanel","narrPanel","handTitle","handHint","handRow","layRow","layBtn","endTurnRow","endTurnBtn","drawNote",
+ "oppPile","youPile","intelBar","intelLines","modPanel","cpuModCallout","luckyPanel","peekPanel","sensePanel","narrPanel","handTitle","handHint","handRow","layRow","layBtn","endTurnRow","endTurnBtn","drawNote",
  "logList","toast","modListHow",
  "hostPanel","hostCode","hostHint","hostStatus","hostRetryBtn","copyCodeBtn","cancelHostBtn",
  "joinCodeInput","joinBtn","waitCode","waitText","waitStatus","waitError","retryWaitBtn",
@@ -1971,6 +2009,17 @@ function toast(msg){
   els.toast.textContent=msg; els.toast.classList.add("show");
   clearTimeout(toastTimer); toastTimer=setTimeout(function(){ els.toast.classList.remove("show"); }, 3400);
 }
+/* v29 (Rule 5b): CPU modifier callout banner — names the mod the Computer
+   is about to play, shown BEFORE its animation starts. */
+var CPU_MOD_CALLOUT_MS=1350; /* 1.2–1.5s */
+function showCpuModCallout(pm){
+  if(!els.cpuModCallout) return;
+  var nm = pm.copied ? MODIFIER_INFO[pm.copied].name : MODIFIER_INFO[pm.mod].name;
+  var label = pm.mod==="mirror" ? (pm.copied ? ("🪞 Computer plays Mirror Pond — copying "+nm) : "🪞 Computer plays Mirror Pond") : (MODIFIER_INFO[pm.mod].icon+" Computer plays "+nm);
+  els.cpuModCallout.textContent=label;
+  els.cpuModCallout.classList.add("show");
+}
+function hideCpuModCallout(){ if(els.cpuModCallout) els.cpuModCallout.classList.remove("show"); }
 function myName(){ var v=(els.nameInput.value||"").trim(); return v ? v.slice(0,16) : "You"; }
 function esc(s){ return String(s).replace(/[&<>"]/g, function(ch){ return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[ch]; }); }
 
@@ -2473,7 +2522,7 @@ function showStripTyping(name){
   if(stripTypingEl && stripTypingEl.parentNode===els.convoStrip) return;
   stripTypingEl=setStripBar("cmsg typing opp", "opponent", name, '💭 Thinking<span class="dots"></span>');
 }
-function clearStrip(){ clearPairCelebration(); /* a new game / leaving sweeps any stale PAIR! pill + confetti with the strip */ peekPanelData=null; sensePanelData=null; narrPanelData=null; /* v28 Fix 4/6 + T1: a new game drops the persistent peek/sense/narration panels too */ if(els.convoStrip) els.convoStrip.innerHTML=""; stripBarEl=null; stripTypingEl=null; stripDotsEl=null; stripPendingShown=null; stripAskTextShown=null; stripQueue=[]; stripShownAt=0; stripShownSeq=0; stripShownIsAsk=false; /* T2 FIX: a new game drops the ask-ness of the bar's message with the rest of the strip state */ stripCurrentHold=STRIP_MIN_MS; if(stripTimer){ clearTimeout(stripTimer); stripTimer=null; } busy=false; /* NEW ITEM 4: a stranded input lock dies with the strip on a new game / leave */ stripDenialSeq=0; stripDenialShownAt=0; /* FIX ROUND 4 (1): a new game / leaving abandons any go-fish presentation still waiting on its denial — the old draw must not play in the new game. */ if(deferredFx){ var pd=deferredFx; deferredFx=null; if(pd.timer) clearTimeout(pd.timer); if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false); } if(deferredShownFx){ var ps=deferredShownFx; deferredShownFx=null; if(ps.timer) clearTimeout(ps.timer); if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false); } stripEventSeq=0; stripEventShownAt=0; drawNoteReadySeq=0; drawNoteText=""; /* v24 TIMING: a new game / leave drops any released draw note with the strip */ }
+function clearStrip(){ hideCpuModCallout(); /* v29: a pending CPU callout dies with the strip on a new game / leave */ clearPairCelebration(); /* a new game / leaving sweeps any stale PAIR! pill + confetti with the strip */ peekPanelData=null; sensePanelData=null; narrPanelData=null; /* v28 Fix 4/6 + T1: a new game drops the persistent peek/sense/narration panels too */ if(els.convoStrip) els.convoStrip.innerHTML=""; stripBarEl=null; stripTypingEl=null; stripDotsEl=null; stripPendingShown=null; stripAskTextShown=null; stripQueue=[]; stripShownAt=0; stripShownSeq=0; stripShownIsAsk=false; /* T2 FIX: a new game drops the ask-ness of the bar's message with the rest of the strip state */ stripCurrentHold=STRIP_MIN_MS; if(stripTimer){ clearTimeout(stripTimer); stripTimer=null; } busy=false; /* NEW ITEM 4: a stranded input lock dies with the strip on a new game / leave */ stripDenialSeq=0; stripDenialShownAt=0; /* FIX ROUND 4 (1): a new game / leaving abandons any go-fish presentation still waiting on its denial — the old draw must not play in the new game. */ if(deferredFx){ var pd=deferredFx; deferredFx=null; if(pd.timer) clearTimeout(pd.timer); if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false); } if(deferredShownFx){ var ps=deferredShownFx; deferredShownFx=null; if(ps.timer) clearTimeout(ps.timer); if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false); } stripEventSeq=0; stripEventShownAt=0; drawNoteReadySeq=0; drawNoteText=""; /* v24 TIMING: a new game / leave drops any released draw note with the strip */ }
 function pushEventToStrip(ev,v){
   if(!ev || !v) return 0;
   var _pc0=stripPushCount; /* TIMING PASS: report how many messages this event added */
@@ -2550,14 +2599,15 @@ function modUseful(m,v){
     case "magnet": return !!(you.sense&&you.sense.length);
     case "snatch": return opp.cardCount>=2;
     case "storm": return opp.cardCount>=3;
-    case "sense": case "peek": return you.hand.length>0 && opp.cardCount>0 && !opp.fogged;
+    case "sense": return you.hand.length>0 && opp.cardCount>0 && (opp.fogged || v.senseUsable!==false); /* v29: Sense is useful when fogged (it fizzles and lifts the fog) or when a mate exists; senseUsable is the server's flag in live, computed locally in solo. */
+    case "peek": return you.hand.length>0 && opp.cardCount>0 && !opp.fogged;
     case "double": return deck>=2;
     case "lucky": return deck>=3;
     case "shield": return !you.ringShielded && opp.modifierCount>0;
     case "anchor": return !you.shielded && opp.modifierCount>0;
     case "fog": return !you.fogged && (opp.oppHasPeekSense!==undefined ? opp.oppHasPeekSense : opp.modifierCount>0); /* Audit C: fog blocks only Peek/Mate Sense — glow only when the opponent holds one (older live views without the field fall back to any-mod). */
     case "goldie": case "bait": return you.hand.length>0;
-    case "mirror": return !!v.oppLastMod;
+    case "mirror": return !!v.oppLastMod && v.oppLastMod!=="reel"; /* v29: Mirror Pond cannot copy Reel In, so it never glows for it. */
     case "whirl": return true;
     case "monster": return you.hand.length>=2;
     case "swap": return you.hand.some(function(c){ return you.hand.filter(function(x){ return pairIdFor(x)===pairIdFor(c); }).length===1; });
@@ -2578,7 +2628,8 @@ function modBlockedReason(m,v){
   var you=v.you, opp=v.opponent;
   if(!you) return null;
   switch(m){
-    case "mirror": return v.oppLastMod ? null : "Nothing to copy yet — they haven't played a modifier.";
+    case "mirror": return v.oppLastMod==="reel" ? "Mirror Pond can't copy Reel In — Reel In can only steal once per player per game." : (v.oppLastMod ? null : "Nothing to copy yet — they haven't played a modifier.");
+    case "sense": return v.senseUsable===false ? "No mates to sense — your opponent holds none of your cards' mates." : null; /* v29: dimmed only when the flag is explicitly FALSE (fogged → TRUE; a view without the flag never dims). */
     case "reel": return (opp && opp.pairs.length===0) ? "They have no pairs in their pile to steal." : null;
     case "anchor": return you.shielded ? "Your Anchor is already down." : null;
     case "shield": return you.ringShielded ? "Your Life Ring is already up." : null;
@@ -2860,7 +2911,7 @@ function render(){
   else if(armed){
     var ai=MODIFIER_INFO[armed.mod];
     if(ai){
-      els.handHint.textContent = ai.icon+" Armed — tap one of your fish cards"+(armed.mod==="magnet" ? " and the hook hunts its exact mate." : armed.mod==="goldie" ? " and Goldie hunts its exact mate — pond or their hand." : armed.mod==="bait" ? " to offer as bait — you'll take a random card from their hand in exchange." : " to toss it back.");
+      els.handHint.textContent = ai.icon+" Armed — tap one of your fish cards"+(armed.mod==="magnet" ? (mode==="solo" ? " and the hook hunts its exact mate — highlighted cards are the ones whose mate they hold." : " and the hook hunts its exact mate — tap any card; if they don't hold its mate, the play is refunded.") : armed.mod==="goldie" ? " and Goldie hunts its exact mate — pond or their hand." : armed.mod==="bait" ? " to offer as bait — you'll take a random card from their hand in exchange." : " to toss it back.");
       els.handHint.className="hand-hint armed";
     } else {
       /* SAFETY NET (v27 freeze fix): a poisoned armed state ({mod:null} or an unknown id) used to throw on ai.icon here and freeze every render — and, when the throw landed inside waitForStripThenCpu, it killed the CPU gate (thinking stuck true, bot step never scheduled). Clear the poisoned state and show the default hint instead of throwing. */
@@ -2914,17 +2965,28 @@ function render(){
     senseHitIds={};
     sensePanelData.found.forEach(function(f){ senseHitIds[mateIdOf(f)]=true; });
   }
+  /* v29 (Rule 3): SOLO only — while Magnet Hook is armed, the cards whose
+     mate the Computer holds glow. LIVE never highlights (the client must
+     not learn the opponent's hand). */
+  var magnetHitIds=null;
+  if(armed && armed.mod==="magnet" && mode==="solo" && S){
+    var oppHand=S.players[1-mySeat].hand;
+    magnetHitIds={};
+    v.you.hand.forEach(function(c){ if(oppHand.some(function(o){ return o.id===mateIdOf(c); })) magnetHitIds[c.id]=true; });
+  }
   var html="";
   v.you.hand.forEach(function(c){
     var glow = (senseHitIds && senseHitIds[c.id]) ? " sense-hit" : ""; // v28 Fix 4: the card it found stays highlighted
+    if(magnetHitIds && magnetHitIds[c.id]) glow += " magnet-hit"; // v29: SOLO Magnet Hook armed — this card's mate is held by the Computer
     html += '<button class="card-btn'+(armed&&myTurnActive?" targetable":"")+'" data-fish="'+esc(c.id)+'" '+(myTurnActive?"":"disabled")+' aria-label="Ask for the '+esc(mateFace(c))+" — the other "+colorOf(c.suit)+" "+esc(c.rank)+" (your "+esc(c.rank)+" of "+SUIT_NAME[c.suit]+")"+'">'
       + '<span class="pcard'+(isRed(c.suit)?" red":"")+glow+'"><span class="r">'+esc(c.rank)+" "+SUIT_GLYPH[c.suit]+'</span><span class="mid">'+SUIT_GLYPH[c.suit]+'</span><span class="r bot">'+esc(c.rank)+" "+SUIT_GLYPH[c.suit]+"</span></span></button>";
   });
   v.you.modifiers.forEach(function(m){
     var inf=MODIFIER_INFO[m], art=MODIFIER_ART[m];
     var usefulM = myTurnActive && modUseful(m,v);
-    html += '<button class="card-btn" data-mod="'+m+'" '+(v.phase==="playing"?"":"disabled")+' aria-label="Modifier card: '+esc(inf.name)+". "+esc(inf.blurb)+(usefulM?" This one could help right now.":"")+'">'
-      + '<span class="modcard'+(selectedMod===m?" selected":"")+(usefulM?" useful":"")+'" style="background:'+art.bg+";border-color:"+art.edge+";color:"+art.ink+'"><span class="tag">★ Mod</span><span class="ic">'+inf.icon+"</span></span></button>";
+    var blockedM = modBlockedReason(m,v); /* v29: a gated modifier (Mate Sense with no mate, Mirror Pond on Reel In) reads dimmed in the hand — tapping it still opens the panel, which names the reason. */
+    html += '<button class="card-btn" data-mod="'+m+'" '+(v.phase==="playing"?"":"disabled")+' aria-label="Modifier card: '+esc(inf.name)+". "+esc(inf.blurb)+(usefulM?" This one could help right now.":"")+(blockedM?" "+blockedM:"")+'">'
+      + '<span class="modcard'+(selectedMod===m?" selected":"")+(usefulM?" useful":"")+(blockedM?" dimmed":"")+'" style="background:'+art.bg+";border-color:"+art.edge+";color:"+art.ink+'"><span class="tag">★ Mod</span><span class="ic">'+inf.icon+"</span></span></button>";
   });
   if(!v.you.hand.length && !v.you.modifiers.length) html='<span style="color:var(--ink-soft);font-size:14px">Your hand is empty.</span>';
   els.handRow.innerHTML=html;
@@ -3436,6 +3498,7 @@ function releaseBusyWhenFxDone(){
    failsafe (FIX ROUND 2 (1b)) keeps a stuck effect from freezing
    the game. */
 var cpuGateStartFrame=0, cpuGateStartWall=0;
+var cpuIdleSinceWall=0; /* v29 (Rule 5a): wall time the scene last went fully idle — the fresh-step pause runs from here. */
 var cpuChain=0; /* PACING FIX (re-test: a computer multi-pair chain turn
    took ~4 minutes for ~10 pairs, ~90s for 4): consecutive steps of one
    retained CPU turn (each pair earns another ask) count up here, and
@@ -3445,25 +3508,27 @@ var cpuChain=0; /* PACING FIX (re-test: a computer multi-pair chain turn
    pair instead of playing every pair out at full first-step pace.
    The count resets the moment a bot step passes the turn. */
 function waitForStripThenCpu(){
-  if(mode!=="solo" || !S || S.phase!=="playing" || S.turn!==1){ busy=false; cpuGateActive=false; cpuGateStartFrame=0; cpuGateStartWall=0; cpuChain=0; return; }
+  if(mode!=="solo" || !S || S.phase!=="playing" || S.turn!==1){ busy=false; cpuGateActive=false; cpuGateStartFrame=0; cpuGateStartWall=0; cpuIdleSinceWall=0; cpuChain=0; return; }
   if(!cpuGateStartWall){ cpuGateStartFrame=fxFrameNow(); cpuGateStartWall=Date.now(); }
   var chain = cpuChain>0;
   var fxBusy = (window.SceneFX && SceneFX.animBusy) ? SceneFX.animBusy() : false;
-  /* The FX wait is wall-bounded like the player's input release (see
-     releaseBusyWhenFxDone): ~2.0s for a fresh CPU step (T2: was 2.5s —
-     the longest FX tails, storm 5.4s / confetti 4.6s, kept the gate
-     waiting long after the action itself had landed; the effect keeps
-     playing visually while the CPU acts, trigger() never wipes live
-     FX), ~0.75s inside a chain — never the old 1200-frame (~20s)
-     failsafe, which scene time's fixed 1/60s-per-frame step turned
-     into the normal path on any display under 60fps. A step that
-     fires while the previous effect's tail is still playing is safe:
-     trigger() never wipes live FX, so the two overlap briefly and
-     both read clearly. */
+  /* v29 (Rule 5a/c): a FRESH CPU step waits for the scene to be 100% idle
+     (animBusy() false) AND a 1.1s pause after it goes idle — the pause
+     runs from the moment the player's Go Fish draw animation completes.
+     Between steps (chain or fresh) the beat is at least as long as the
+     strip narration hold for the last action: the gate waits until the
+     strip backlog has fully cleared (every queued message had its
+     reading-time hold). A 12s wall failsafe covers a stuck strip or a
+     stuck effect, so the CPU can never freeze the game. */
+  if(!chain){
+    if(fxBusy){ cpuIdleSinceWall=0; }
+    else if(!cpuIdleSinceWall){ cpuIdleSinceWall=Date.now(); }
+  }
   var fxCap = chain ? 45 : 120;
-  var stripOk = chain
-    ? (stripEventSeq>=lastSeqSeen && (!stripShownAt || (Date.now()-stripShownAt)>=300))
-    : stripGateClear();
+  var gateWall = Date.now()-cpuGateStartWall;
+  var fxIdleOk = chain ? true : (cpuIdleSinceWall>0 && (Date.now()-cpuIdleSinceWall)>=1100);
+  var stripOk = !stripBacklog();
+  if(gateWall>12000){ fxIdleOk=true; stripOk=true; }
   /* T2 FIX (regression caught by the after-fix solo probe): the gate
      must ALSO wait until the latest event's first strip message has
      actually taken the bar (stripEventSeq>=lastSeqSeen) — the first
@@ -3477,19 +3542,44 @@ function waitForStripThenCpu(){
      and a 3s wall failsafe covers events that push no strip message
      at all, so a message-less event can never stall the CPU. */
   if((stripEventSeq<lastSeqSeen) && (Date.now()-cpuGateStartWall)<=3000) stripOk=false;
-  if(!stripOk || (fxBusy && fxFramesSince(cpuGateStartFrame,cpuGateStartWall)<fxCap)){ setTimeout(waitForStripThenCpu, 150); return; }
-  cpuGateStartFrame=0; cpuGateStartWall=0;
+  if(!stripOk || !fxIdleOk || (chain && fxBusy && fxFramesSince(cpuGateStartFrame,cpuGateStartWall)<fxCap)){ setTimeout(waitForStripThenCpu, 150); return; }
+  cpuGateStartFrame=0; cpuGateStartWall=0; cpuIdleSinceWall=0;
   thinking=true;
   render();
   setTimeout(function(){
     cpuGateActive=false;
     thinking=false;
+    /* v29 (Rule 5b): snapshot the bot's modifiers BEFORE the step — a
+       mod play consumes exactly one card, so the kind whose count drops
+       is the mod the CPU just played (an ask / Lucky keep / endTurn
+       consumes none). botStep itself stays fully synchronous. */
+    var modsBefore = S.players[1].modifiers.slice();
     botStep(S,names);
+    var playedMod=null;
+    if(S && S.phase==="playing"){
+      var counts={};
+      modsBefore.forEach(function(m){ counts[m]=(counts[m]||0)+1; });
+      S.players[1].modifiers.forEach(function(m){ counts[m]=(counts[m]||0)-1; });
+      Object.keys(counts).forEach(function(m){ if(counts[m]>0) playedMod=m; });
+    }
     /* Chain bookkeeping BEFORE afterChange kicks the next gate: the
        bot kept its turn (a pair, a hit, a fished mate, Whirlpool
        Spin) -> the next step is a chain step; the turn passed -> the
        chain is over and the next CPU turn starts at full pace. */
     cpuChain = (S && S.phase==="playing" && S.turn===1) ? cpuChain+1 : 0;
+    if(playedMod){
+      /* The CPU played a modifier — show the callout banner naming it
+         for 1.35s BEFORE anything renders (no strip message, no
+         animation, no pile update until afterChange runs), so the
+         player sees what's coming before the animation starts. */
+      showCpuModCallout({ mod:playedMod, copied:(playedMod==="mirror" ? S.lastMod[1] : null) });
+      setTimeout(function(){
+        hideCpuModCallout();
+        busy=false;
+        afterChange();
+      }, CPU_MOD_CALLOUT_MS);
+      return;
+    }
     busy=false;
     afterChange();
   }, chain ? (150 + Math.random()*150) : (450 + Math.random()*350)); /* PACING FIX: first step 0.45–0.8s thinking; chain steps 0.15–0.3s — the chain's story is in the strip and the pair piles, it does not need a fresh full thinking pause per pair */
@@ -3525,6 +3615,7 @@ function dropPendingPresentations(){
   if(deferredShownFx){ var dps=deferredShownFx; deferredShownFx=null; if(dps.timer) clearTimeout(dps.timer); }
   if(window.SceneFX && SceneFX.setHold) SceneFX.setHold(false);
   if(window.SceneFX && SceneFX.resetForNewGame) SceneFX.resetForNewGame();
+  hideCpuModCallout(); /* v29: a pending CPU callout dies at the Rematch tap, with the rest of the finished game's presentations */
   clearPairCelebration();
   /* REMATCH SWEEP 2 (Jenna, real play: banner + display card + gold
      confetti STILL persisted): three more leftovers die at the tap —
@@ -3555,7 +3646,7 @@ els.muteBtn.addEventListener("click", function(){
 });
 function leaveGame(){
   teardownRTC();
-  mode=null; S=null; view=null; busy=false; thinking=false; selectedMod=null; armed=null; disconnected=false; hostStatus="waiting"; roomCode=""; lastSeqSeen=0; celebratedSeq=0; prevPairCounts=null; cpuChain=0; cpuGateActive=false;
+  mode=null; S=null; view=null; busy=false; thinking=false; selectedMod=null; armed=null; disconnected=false; hideCpuModCallout(); hostStatus="waiting"; roomCode=""; lastSeqSeen=0; celebratedSeq=0; prevPairCounts=null; cpuChain=0; cpuGateActive=false;
   clearStrip();
   if(els.endBanner){ els.endBanner.classList.remove("show"); els.endBanner.style.display="none"; }
   if(els.confettiLayer) els.confettiLayer.innerHTML="";
@@ -7672,12 +7763,14 @@ var SceneFX = (function(){
     pool.forEach(function(c,ix){
       var tex=(c.mod || !c.rank) ? backTex : frontTexFor(c.id);
       var obj=makeCardObj(tex);
+      obj.visible=false; /* v29 (Rule 5d): the hauled cards reveal one at a time, 0.6s apart — not all at once. */
       obj.scale.setScalar(2.2);
       var hx=(ix-(pool.length-1)/2)*2.1;
       obj.position.set(hx,2.0,0);
       obj.rotation.set(-0.22,0,0);
       obj.userData.item4="luckyHover"; // probe tag: which prop this is
       scene.add(obj);
+      (function(o,delay){ later(delay,function(){ o.visible=true; }); })(obj, ix*0.6);
       luckyHover.push({ mesh:obj, id:c.id, x:hx, ph:ix*1.3 });
     });
   }
@@ -7700,6 +7793,7 @@ var SceneFX = (function(){
     });
     luckyHover.length=0;
     if(kept){
+      kept.mesh.visible=true; /* v29: the kept card may not have revealed yet when the choice resolves — it flies home visible. */
       flyCard({ from:kept.mesh.position.clone(), to:toPos, tex:keptTex, dur:1.0, arc:1.4 });
       try{ scene.remove(kept.mesh); }catch(e){}
       return true;
@@ -7797,6 +7891,10 @@ var SceneFX = (function(){
         later(1.22,function(){ doSplash(true); }); // ITEM 4: the green snap burst is gone - the jaws closing on the card + the splash carry the snap
         react(A,"wow",1.0);
         castLater(1.5, drawnTex);
+        /* v29 (Rule 5d): the CPU's two haul cards arrive one at a time —
+           the cast brings the first back at 1.5s, a second card rises
+           on its own beat at 2.6s (backs — the CPU's cards stay hidden). */
+        if(ev.actor==="opponent" && ev.count>=2) later(2.6,function(){ flyCard({ from:center.clone().add(new THREE.Vector3(0,0.3,0)), to:aPos, tex:backTex, dur:0.95, mode:"rise" }); });
         later(2.2,function(){ react(A,"happy",0.9); });
         if(ev.pairId) pairFlight(A,3.4);
         break;

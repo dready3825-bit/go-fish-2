@@ -673,7 +673,7 @@
       <button class="btn btn-primary btn-block" id="soloBtn">🎣 Play vs the Computer</button>
       <button class="btn btn-block" id="installBtn" style="display:none">📲 How to install</button>
       <div id="liveNotice" role="status"></div>
-      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v30</div>
+      <div style="text-align:center;font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:2px">Build v31</div>
       <div class="divider">Play a friend live</div>
       <p style="font-size:13.5px;color:var(--ink-soft);margin:4px 2px 10px;line-height:1.55;text-align:left">Send your friend this app's link — https://dready3825-bit.github.io/go-fish-2/ — they can install it too. One of you taps <b>Create a room</b> and gets a short 6-letter code — tell your friend the code, they type it in below and tap <b>Join room</b>. That's it — no long codes to copy and paste.</p>
 
@@ -1769,13 +1769,19 @@ function applyLuckyChoice(st,who,choiceId,names){
   if(pondedBack.length) st.deck=shuffle(st.deck.concat(pondedBack));
   var me=st.players[who], name=names[who];
   var keptLabel="nothing";
-  /* v29 (Rule 4 — lenient Lucky keep edge): if this kind was already
+  /* v29 (Rule 4 — lenient Lucky keep): if this kind was already
      received, swap the kept card for a random unseen pond card instead.
      If no valid replacement exists, the duplicate is KEPT rather than
-     losing the choice — the only way the 1-copy cap can be broken. */
+     losing the choice — the only way the 1-copy cap can be broken.
+     swapForUnseen inserted the duplicate into the deck while searching
+     for a replacement, so on the no-replacement path that inserted
+     copy is removed again — by reference, because the twin copy of
+     this mod shares the same id — so the kept card exists in exactly
+     one place and the total stays 86, never 87. */
   if(isModCard(keep) && st.receipts && st.receipts[who][keep.mod]){
     var repL=swapForUnseen(st,who,keep);
     if(repL) keep=repL;
+    else { var dupIx=st.deck.indexOf(keep); if(dupIx>=0) st.deck.splice(dupIx,1); }
   }
   if(isModCard(keep)){ me.modifiers.push(keep.mod); recordReceipt(st,who,keep.mod); enforceModLimit(st,who); keptLabel="the "+MODIFIER_INFO[keep.mod].name+" modifier"; }
   else { me.hand.push(keep); keptLabel="the "+keep.rank+SUIT_GLYPH[keep.suit]; }
